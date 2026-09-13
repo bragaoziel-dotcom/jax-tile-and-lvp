@@ -9,10 +9,16 @@ const required = [
   'assets/projects/tile-shower-marble.webp',
 ];
 
+function isWebP(abs) {
+  const buf = fs.readFileSync(abs);
+  return buf.length >= 12 && buf.subarray(0, 4).toString('ascii') === 'RIFF' && buf.subarray(8, 12).toString('ascii') === 'WEBP';
+}
+
 for (const rel of required) {
   const abs = path.join(root, rel);
   if (!fs.existsSync(abs)) errors.push(`missing optimized asset: ${rel}`);
   else if (fs.statSync(abs).size === 0) errors.push(`empty optimized asset: ${rel}`);
+  else if (!isWebP(abs)) errors.push(`invalid WebP binary signature: ${rel}`);
 }
 
 function walk(dir = '') {
@@ -38,4 +44,4 @@ if (errors.length) {
   errors.forEach((e) => console.error(`- ${e}`));
   process.exit(1);
 }
-console.log('Asset validation passed: optimized logo and project images are local and no visible HTML depends on Lovable assets.');
+console.log('Asset validation passed: optimized WebP assets have valid signatures, are local, and no visible HTML depends on Lovable assets.');
