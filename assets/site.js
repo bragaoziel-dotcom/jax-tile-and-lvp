@@ -9,6 +9,12 @@ const dataLayerPush=(event,params={})=>{
 const isPt=(document.documentElement.lang||'').toLowerCase().startsWith('pt');
 const copy=isPt?{sending:'Enviando…',success:'Obrigado — recebemos seu pedido. Entraremos em contato em breve.',error:'Não foi possível enviar agora. Ligue para (904) 520-1994.'}:{sending:'Sending…',success:'Thank you — your request was received. We will contact you shortly.',error:'We could not send the request. Please call (904) 520-1994.'};
 
+// Keep the Jax mark readable on phones. The source logo has a wide lockup, so
+// the old 178px mobile width made the actual lettering appear much too small.
+const brandFix=document.createElement('style');
+brandFix.textContent='@media(max-width:850px){.site-header{height:86px}.brand img{width:236px;height:68px}}@media(max-width:620px){.brand img{width:220px;height:64px}}';
+document.head.appendChild(brandFix);
+
 // Attribution is retained only for the lead backend/email. Do not send click IDs,
 // contact details or free-text project information to GA4, GTM or Google Ads.
 const params=new URLSearchParams(window.location.search);
