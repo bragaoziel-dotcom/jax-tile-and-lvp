@@ -47,85 +47,26 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-  deploy-production:
-    name: Deploy to Hostinger
+  verify-production:
+    name: Verify Hostinger production
     needs: [validate, package-production]
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    environment: production
-    env:
-      HOSTINGER_SSH_HOST: ${{ secrets.HOSTINGER_SSH_HOST }}
-      HOSTINGER_SSH_PORT: ${{ secrets.HOSTINGER_SSH_PORT }}
-      HOSTINGER_SSH_USER: ${{ secrets.HOSTINGER_SSH_USER }}
-      HOSTINGER_SSH_KEY: ${{ secrets.HOSTINGER_SSH_KEY }}
-      JAX_DEPLOY_PATH: ${{ secrets.JAX_DEPLOY_PATH }}
     steps:
-      - name: Verify deployment secrets
-        shell: bash
-        run: |
-          set -euo pipefail
-          missing=0
-          for name in HOSTINGER_SSH_HOST HOSTINGER_SSH_PORT HOSTINGER_SSH_USER HOSTINGER_SSH_KEY JAX_DEPLOY_PATH; do
-            if [ -z "${!name:-}" ]; then
-              echo "::error::$name is not configured in GitHub Actions secrets."
-              missing=1
-            fi
-          done
-          if [ "$missing" -ne 0 ]; then
-            echo "Automatic deployment is configured but cannot run until the Hostinger SSH secrets are added."
-            exit 1
-          fi
-
-      - name: Download validated production package
-        uses: actions/download-artifact@v4
-        with:
-          name: jax-tile-and-lvp-production
-          path: deploy-package
-
-      - name: Extract production package
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p deploy
-          unzip -q deploy-package/jax-tile-and-lvp-production.zip -d deploy
-          test -f deploy/index.html
-          test -f deploy/api/braga-ai.php
-          test -f deploy/assets/site.js
-
-      - name: Configure SSH
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p ~/.ssh
-          printf '%s\n' "$HOSTINGER_SSH_KEY" > ~/.ssh/id_ed25519
-          chmod 600 ~/.ssh/id_ed25519
-          ssh-keyscan -p "$HOSTINGER_SSH_PORT" -H "$HOSTINGER_SSH_HOST" >> ~/.ssh/known_hosts
-
-      - name: Deploy validated site to Hostinger
-        shell: bash
-        run: |
-          set -euo pipefail
-          ssh -p "$HOSTINGER_SSH_PORT" "$HOSTINGER_SSH_USER@$HOSTINGER_SSH_HOST" "mkdir -p '$JAX_DEPLOY_PATH'"
-          rsync -az \
-            --exclude='.htaccess' \
-            --exclude='.user.ini' \
-            --exclude='wp-config.php' \
-            --exclude='.env' \
-            -e "ssh -p $HOSTINGER_SSH_PORT" \
-            deploy/ \
-            "$HOSTINGER_SSH_USER@$HOSTINGER_SSH_HOST:$JAX_DEPLOY_PATH/"
-
+      - name: Wait for Hostinger Git auto-deployment
+        run: sleep 20
       - name: Verify production homepage
         shell: bash
         run: |
           set -euo pipefail
-          for attempt in 1 2 3 4 5; do
+          for attempt in 1 2 3 4 5 6; do
             if curl --fail --silent --show-error --location --max-time 20 \
               https://jaxtileandlvp.com/ | grep -q 'Jax Tile &amp; LVP'; then
-              echo 'Production homepage responded successfully.'
+              echo 'Hostinger production is online.'
               exit 0
             fi
-            sleep 5
+            echo "Waiting for Hostinger deployment (attempt $attempt/6)..."
+            sleep 10
           done
-          echo '::error::Deployment completed, but production verification did not pass.'
+          echo '::error::Production homepage verification did not pass after Hostinger deployment window.'
           exit 1
