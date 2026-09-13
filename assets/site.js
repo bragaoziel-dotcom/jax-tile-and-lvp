@@ -6,6 +6,7 @@ const attribution={};
 ['utm_source','utm_medium','utm_campaign','utm_term','utm_content','gclid','gbraid','wbraid'].forEach(key=>{const value=params.get(key);if(value){attribution[key]=value;try{sessionStorage.setItem('jax_'+key,value)}catch{}}else{try{const saved=sessionStorage.getItem('jax_'+key);if(saved)attribution[key]=saved}catch{}}});
 
 document.querySelectorAll('a[href^="tel:"]').forEach(link=>link.addEventListener('click',()=>dataLayerPush('phone_click',{phone_number:'+19045201994',page_path:location.pathname,...attribution})));
+document.querySelectorAll('a[href^="sms:"]').forEach(link=>link.addEventListener('click',()=>dataLayerPush('sms_click',{phone_number:'+19045201994',page_path:location.pathname,...attribution})));
 document.querySelectorAll('a[href^="mailto:"]').forEach(link=>link.addEventListener('click',()=>dataLayerPush('email_click',{page_path:location.pathname,...attribution})));
 document.querySelectorAll('.track-estimate').forEach(link=>link.addEventListener('click',()=>dataLayerPush('estimate_cta_click',{page_path:location.pathname,...attribution})));
 
