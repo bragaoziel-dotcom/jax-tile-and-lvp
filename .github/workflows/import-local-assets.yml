@@ -1,0 +1,64 @@
+name: Import Local Assets
+
+on:
+  push:
+    branches: [perf/optimize-logo]
+
+permissions:
+  contents: write
+
+jobs:
+  import-assets:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: perf/optimize-logo
+      - name: Import real optimized Braga project photos and rewrite references
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p assets/projects
+          curl --fail --location --retry 3 --silent --show-error \
+            https://bragaremodeling.com/projects/optimized/lvp-open-room.webp \
+            -o assets/projects/lvp-open-room.webp
+          curl --fail --location --retry 3 --silent --show-error \
+            https://bragaremodeling.com/projects/optimized/tile-shower-marble.webp \
+            -o assets/projects/tile-shower-marble.webp
+          test -s assets/projects/lvp-open-room.webp
+          test -s assets/projects/tile-shower-marble.webp
+          python - <<'PY'
+          from pathlib import Path
+
+          root = Path('.')
+          old_logo = '<img src="/assets/jax-tile-lvp-logo.png"'
+          new_logo = '<img src="/assets/jax-tile-lvp-logo.webp"'
+          old_lvp = 'https://braga-guardian-angel.lovable.app/__l5e/assets-v1/0ded6da0-9db6-4d6e-a737-39e7b69b1996/lvp-open-room.jpg'
+          old_tile = 'https://braga-guardian-angel.lovable.app/__l5e/assets-v1/233fd2a6-474d-4dcb-a548-8a6eaa0d8bfa/tile-shower-marble.jpg'
+
+          for path in root.rglob('*.html'):
+              text = path.read_text(encoding='utf-8')
+              text = text.replace(old_logo, new_logo)
+              text = text.replace(old_lvp, '/assets/projects/lvp-open-room.webp')
+              text = text.replace(old_tile, '/assets/projects/tile-shower-marble.webp')
+              if path.as_posix() == 'projects/index.html':
+                  text = text.replace(
+                      '<meta property="og:image" content="/assets/projects/lvp-open-room.webp">',
+                      '<meta property="og:image" content="https://jaxtileandlvp.com/assets/projects/lvp-open-room.webp">'
+                  )
+              path.write_text(text, encoding='utf-8')
+          PY
+          rm .github/workflows/import-local-assets.yml
+          node scripts/validate-site.mjs
+          node scripts/validate-assets.mjs
+      - name: Commit imported assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Localize and optimize Jax visual assets"
+          git push origin HEAD:perf/optimize-logo
