@@ -20,6 +20,8 @@ jobs:
           node-version: '20'
       - name: Validate static site
         run: node scripts/validate-site.mjs
+      - name: Validate optimized assets
+        run: node scripts/validate-assets.mjs
 
   package-production:
     needs: validate
