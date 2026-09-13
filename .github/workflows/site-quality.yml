@@ -20,3 +20,26 @@ jobs:
           node-version: '20'
       - name: Validate static site
         run: node scripts/validate-site.mjs
+
+  package-production:
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Build production package
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          cp 404.html index.html robots.txt sitemap.xml dist/
+          cp -R api assets contact floor-removal-preparation portugues privacy projects service-areas tile-installation-jacksonville vinyl-flooring-jacksonville dist/
+          (cd dist && zip -qr ../jax-tile-and-lvp-production.zip .)
+          test -s jax-tile-and-lvp-production.zip
+      - name: Upload validated production package
+        uses: actions/upload-artifact@v4
+        with:
+          name: jax-tile-and-lvp-production
+          path: jax-tile-and-lvp-production.zip
+          if-no-files-found: error
+          retention-days: 30
