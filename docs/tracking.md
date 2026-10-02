@@ -1,6 +1,6 @@
 # Jax Tile & LVP — Tracking Reference
 
-Last updated: 2026-09-13.
+Last updated: 2026-10-02.
 
 ## Shared Braga measurement infrastructure
 
@@ -26,7 +26,11 @@ Jax Tile & LVP intentionally reuses the confirmed Braga Remodeling measurement i
 - `sms_click`
 - `email_click`
 - `cta_click`
-- `ai_chat_opened`
+- `calculator_start`, `quiz_step`, `quiz_complete`, `calculator_estimate` — price quiz (sq ft bucket, floor type, stairs/shoe answers; no PII)
+- `booking_click` — "Book my free measure" (`booking_type` = calendar or sms_placeholder)
+- `social_click`
+
+Meta Pixel: `assets/meta-pixel.js` loads only when `META_PIXEL_ID` is filled in (TODO). `site.js` maps `generate_lead`→Lead, `phone_click`/`sms_click`→Contact, `booking_click`→Schedule.
 
 Every event includes `site_brand=jax_tile_lvp`, `page_path`, and language. Service name and CTA location may be included when relevant.
 

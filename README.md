@@ -17,15 +17,22 @@ Legacy/cross-business tracking IDs are blocked by CI.
 
 ## Included
 
-- Responsive local-service website focused on Tile and Vinyl/LVP
-- Real Braga Remodeling LVP and tile project imagery stored locally in Jax assets
+- LVP-only sales landing page: Promo $3.99 / Plus $4.49 / Premium from $4.99 per sq ft installed (500 sq ft minimum), 60-second price quiz, add-on price table, EN/PT pages
+- Real Braga Remodeling LVP project imagery stored locally in Jax assets
 - Optimized WebP brand logo for visible page use
 - Call and SMS CTAs using `(904) 520-1994`
 - Lead form emailing `braga@bragaremodeling.com`
-- Honeypot, input validation, duplicate suppression and conversion-safe response
-- Braga AI backed by Gemini and restricted to Tile and Vinyl/LVP
+- Honeypot, time trap, US phone + 5-digit ZIP validation (320xx/322xx = service area), duplicate suppression and conversion-safe response (out-of-area/no-JS leads are emailed but not counted)
+- Braga AI chat disabled (UI removed, `api/braga-ai.php` returns 410) until a Gemini key and an LVP-only prompt exist
 - Service pages, service-area page, project gallery, Portuguese page and privacy page
 - `robots.txt`, `sitemap.xml`, canonical URLs, hreflang and structured data
+- `.htaccess`: 301 www → apex, 301 `/tile-installation-jacksonville/` → `/`, blocks `/docs`, `/scripts`, `/.github`, `README.md`
+
+## Placeholders to fill (search the repo for `TODO(Oziel)`)
+
+- `assets/site.js`: `BOOKING_URL` (Calendly/Zoho Bookings) and `INSTAGRAM_URL` (Instagram cards/links stay hidden until set)
+- `assets/meta-pixel.js`: `META_PIXEL_ID` (nothing loads while empty)
+- Before/after photos, insurance proof, warranty text, Google reviews, LVP specs and the real in-stock sq ft count (hidden until provided)
 
 ## Hostinger deployment
 
@@ -56,6 +63,10 @@ The site emits privacy-safe events for:
 - `lead_form_submit`
 - `generate_lead`
 - `lead_form_error`
+- `calculator_start`, `quiz_step`, `quiz_complete`, `calculator_estimate` (sq ft bucket only)
+- `booking_click`, `social_click`
+
+If `META_PIXEL_ID` is set, `generate_lead` → `Lead`, phone/SMS → `Contact`, booking → `Schedule`.
 
 `generate_lead` is emitted only after the backend returns `trackConversion: true`. UTM/GCLID attribution stays with the lead backend and is not included in analytics event payloads.
 

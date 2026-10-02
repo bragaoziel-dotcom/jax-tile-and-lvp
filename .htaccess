@@ -1,0 +1,18 @@
+# Jax Tile & LVP — Hostinger (LiteSpeed/Apache) rules.
+# HTTP -> HTTPS is already handled by Hostinger; do not add another HTTPS rule here (avoids redirect loops behind the CDN).
+<IfModule mod_rewrite.c>
+RewriteEngine On
+
+# 1) Canonical host: www -> apex (301)
+RewriteCond %{HTTP_HOST} ^www\.jaxtileandlvp\.com$ [NC]
+RewriteRule ^(.*)$ https://jaxtileandlvp.com/$1 [R=301,L]
+
+# 2) Site is LVP-only: the old tile page goes to the homepage (301)
+RewriteRule ^tile-installation-jacksonville/?(index\.html)?$ / [R=301,L]
+
+# 3) Repo tooling/docs are deployed by Hostinger Git but must not be public
+RewriteRule ^(\.github|\.git|docs|scripts)(/|$) - [F,L]
+RewriteRule ^README\.md$ - [F,L]
+</IfModule>
+
+ErrorDocument 404 /404.html
