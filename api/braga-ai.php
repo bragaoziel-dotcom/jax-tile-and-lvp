@@ -2,6 +2,12 @@
 declare(strict_types=1);
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store');
+
+// Chat disabled on the LVP landing (Oct 2026): no Gemini key on the server, so it only returned canned answers.
+// The chat UI was removed from every page. To re-enable: configure JAX_GEMINI_API_KEY, update the prompt to LVP-only, then delete these 3 lines.
+http_response_code(410);
+echo json_encode(['ok'=>false,'disabled'=>true,'message'=>'Chat is disabled. Call or text (904) 520-1994.']);
+exit;
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') { http_response_code(405); echo json_encode(['ok'=>false]); exit; }
 
 $input = json_decode((string)file_get_contents('php://input'), true);

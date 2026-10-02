@@ -35,7 +35,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p dist
-          cp 404.html index.html robots.txt sitemap.xml dist/
+          cp 404.html index.html robots.txt sitemap.xml .htaccess dist/
           cp -R api assets contact floor-removal-preparation portugues privacy projects service-areas tile-installation-jacksonville vinyl-flooring-jacksonville dist/
           (cd dist && zip -qr ../jax-tile-and-lvp-production.zip .)
           test -s jax-tile-and-lvp-production.zip
