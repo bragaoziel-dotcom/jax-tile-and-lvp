@@ -15,8 +15,7 @@ const dataLayerPush=(event,params={})=>{
   if(typeof window.gtag==='function')window.gtag('event',event,{...safe,send_to:GA4_MEASUREMENT_ID});
   if(typeof window.fbq==='function'){if(META_EVENTS[event])window.fbq('track',META_EVENTS[event],{content_name:event,cta_location:safe.cta_location||''});else if(event==='calculator_estimate')window.fbq('trackCustom','CalculatorEstimate',{sqft_bucket:safe.sqft_bucket||''});}
 };
-const isPt=(document.documentElement.lang||'').toLowerCase().startsWith('pt');
-const copy=isPt?{sending:'Enviando…',success:'Obrigado! Recebemos seu pedido. O Oziel vai te mandar uma mensagem em breve.',error:'Não foi possível enviar agora. Ligue ou mande SMS para (904) 520-1994.',phone:'Coloque um celular dos EUA com 10 dígitos.',zip:'Coloque um ZIP code de 5 dígitos.',name:'Coloque seu nome.'}:{sending:'Sending…',success:'Thank you! We got your request. Oziel will text you shortly.',error:'We could not send the request. Please call or text (904) 520-1994.',phone:'Please enter a valid 10-digit US phone number.',zip:'Please enter a 5-digit ZIP code.',name:'Please enter your name.'};
+const copy={sending:'Sending…',success:'Thank you! We got your request. Oziel will text you shortly.',error:'We could not send the request. Please call or text (904) 520-1994.',phone:'Please enter a valid 10-digit US phone number.',zip:'Please enter a 5-digit ZIP code.',name:'Please enter your name.'};
 
 // Keep the Jax mark readable on phones.
 const brandFix=document.createElement('style');
@@ -45,14 +44,14 @@ const money=n=>'$'+Math.round(n).toLocaleString('en-US');
 const quiz=document.querySelector('#lvp-quiz');
 let calcSummary='';
 if(quiz){
-  const T=isPt?{size:'~{s} sq ft',min:' (mínimo de 500 sq ft)',from:'a partir de ',base:'Piso + instalação',rem:'Remoção do piso atual',stairs:'Escada',shoe:'Shoe molding (Promo/Premium)',shoeUnsure:'Shoe molding, se quiser (Promo/Premium)'}:{size:'~{s} sq ft',min:' (500 sq ft minimum)',from:'from ',base:'Floor + installation',rem:'Removal of current floor',stairs:'Stairs',shoe:'Shoe molding (Promo/Premium)',shoeUnsure:'Shoe molding, if wanted (Promo/Premium)'};
+  const T={size:'~{s} sq ft',min:' (under the 500 sq ft package minimum)',from:'from ',base:'Floor + installation',rem:'Removal of current floor',stairs:'Stairs',shoe:'Shoe molding (Promo/Premium)',shoeUnsure:'Shoe molding, if wanted (Promo/Premium)'};
   const steps=[...quiz.querySelectorAll('.q-step')],result=quiz.querySelector('.q-result'),next=quiz.querySelector('.q-next'),back=quiz.querySelector('.q-back'),nav=quiz.querySelector('.q-nav'),bar=quiz.querySelector('.quiz-progress span'),now=quiz.querySelector('.q-now'),top=quiz.querySelector('.quiz-top');
   let step=1,started=false;
   const val=name=>quiz.querySelector(`input[name="${name}"]:checked`)?.value||'';
   const sqftOf=()=>{const typed=parseFloat(quiz.querySelector('#q-sqft')?.value);if(Number.isFinite(typed)&&typed>0)return typed;const r=parseFloat(val('q_rooms'));return r?r*PRICING.roomSqft:0;};
   const answered=n=>n===1?sqftOf()>0:n===2?!!val('q_floor'):n===3?!!val('q_stairs'):n===4?!!val('q_shoe'):true;
   const show=n=>{step=n;steps.forEach(s=>s.hidden=Number(s.dataset.step)!==n);const done=n>steps.length;result.hidden=!done;nav.hidden=done;top.hidden=done;back.hidden=n===1;if(!done){now.textContent=n;bar.style.width=(n/steps.length*100)+'%';next.disabled=!answered(n);}if(done)compute();quiz.dataset.step=String(n);};
-  const go=n=>{show(n);dataLayerPush(n>steps.length?'quiz_complete':'quiz_step',n>steps.length?{cta_location:'quiz',sqft_bucket:bucket(sqftOf()),current_floor:val('q_floor'),stairs:val('q_stairs'),shoe_molding:val('q_shoe')}:{cta_location:'quiz',quiz_step:n});if(n>steps.length)dataLayerPush('calculator_estimate',{cta_location:'quiz',sqft_bucket:bucket(sqftOf())});quiz.scrollIntoView({behavior:'smooth',block:'start'});};
+  const go=n=>{show(n);dataLayerPush(n>steps.length?'quiz_complete':'quiz_step',n>steps.length?{cta_location:'quiz',sqft_bucket:bucket(sqftOf()),current_floor:val('q_floor'),stairs:val('q_stairs'),shoe_molding:val('q_shoe')}:{cta_location:'quiz',quiz_step:n});if(n>steps.length)dataLayerPush('calculator_estimate',{cta_location:'quiz',sqft_bucket:bucket(sqftOf()),quote_type:sqftOf()<PRICING.minSqft?'custom':'package'});quiz.scrollIntoView({behavior:'smooth',block:'start'});};
   const bucket=s=>s<500?'<500':s<1000?'500-999':s<1500?'1000-1499':s<2500?'1500-2499':'2500+';
   function compute(){
     const sqft=sqftOf(),hi=sqft*(1+PRICING.measureSlack),bL=Math.max(sqft,PRICING.minSqft),bH=Math.max(hi,PRICING.minSqft);
@@ -65,6 +64,14 @@ if(quiz){
     const plus=[bL*PRICING.plus+remL+stL,bH*PRICING.plus+remH+stH];
     const premium=bL*PRICING.premium+remL+stL+shL;
     quiz.querySelector('.q-size').textContent=T.size.replace('{s}',Math.round(sqft).toLocaleString('en-US'))+(sqft<PRICING.minSqft?T.min:'');
+    const small=sqft<PRICING.minSqft;
+    quiz.dataset.quote=small?'custom':'package';
+    quiz.querySelector('.q-custom')?.toggleAttribute('hidden',!small);
+    [quiz.querySelector('.q-packages'),quiz.querySelector('#calc-breakdown'),quiz.querySelector('.calc-note')].forEach(el=>el?.toggleAttribute('hidden',small));
+    const formHead=document.querySelector('#calc-lead-form .form-heading'),formBtn=document.querySelector('#calc-lead-form button[type=submit]');
+    if(formHead){formHead.dataset.def=formHead.dataset.def||formHead.textContent;formHead.textContent=small?'Leave your number and we’ll text you about your custom quote.':formHead.dataset.def;}
+    if(formBtn){formBtn.dataset.def=formBtn.dataset.def||formBtn.textContent;formBtn.textContent=small?'Text Me a Custom Quote':formBtn.dataset.def;}
+    if(small){calcSummary=`Quiz: ~${Math.round(sqft)} sq ft (UNDER 500 sq ft: CUSTOM QUOTE, no package price shown); floor ${val('q_floor')}; stairs ${val('q_stairs')}; shoe ${val('q_shoe')}`;const form=document.querySelector('#calc-lead-form');if(form){const s=form.querySelector('[name="sqft"]');if(s)s.value=Math.round(sqft);const map={carpet:'Carpet',tile:'Tile',glued:'Wood / laminate',floating:'Wood / laminate',concrete:'Bare concrete slab'};const cf=form.querySelector('[name="current_floor"]');if(cf&&map[val('q_floor')])cf.value=map[val('q_floor')];}return;}
     quiz.querySelector('.q-promo').textContent=range(...promo);
     quiz.querySelector('.q-plus').textContent=range(...plus);
     quiz.querySelector('.q-premium').textContent=T.from+money(premium);

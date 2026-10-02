@@ -10,7 +10,10 @@ RewriteRule ^(.*)$ https://jaxtileandlvp.com/$1 [R=301,L]
 # 2) Site is LVP-only: the old tile page goes to the homepage (301)
 RewriteRule ^tile-installation-jacksonville/?(index\.html)?$ / [R=301,L]
 
-# 3) Repo tooling/docs are deployed by Hostinger Git but must not be public
+# 3) Site is English-only: the old Portuguese page (and language variants) go to the homepage (301)
+RewriteRule ^(portugues|portuguese|pt|pt-br|es|espanol)(/.*|\.html)?$ / [R=301,L]
+
+# 4) Repo tooling/docs are deployed by Hostinger Git but must not be public
 RewriteRule ^(\.github|\.git|docs|scripts)(/|$) - [F,L]
 RewriteRule ^README\.md$ - [F,L]
 </IfModule>
