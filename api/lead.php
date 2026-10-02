@@ -25,7 +25,6 @@ $details = clean('details', 1200);
 $page = clean('page', 180);
 $floor = clean('current_floor', 40);
 $quote = clean('quote_summary', 700);
-$lang = clean('lang', 2) === 'pt' ? 'pt' : 'en';
 
 // 3) US phone: 10 digits (optional leading 1), valid NANP area code and exchange.
 $phoneDigits = preg_replace('/\D/', '', clean('phone', 30));
@@ -65,9 +64,10 @@ $flags = [];
 if (!$inArea) $flags[] = 'OUTSIDE SERVICE AREA (ZIP not 320xx/322xx)';
 if ($elapsed === null) $flags[] = 'no JS timing (possible bot)';
 $sizeTxt = $sqft > 0 ? $sqft . ' sq ft' : 'sq ft not given';
-$subject = ($inArea ? '' : '[CHECK AREA] ') . 'New LVP $3.99 lead: ' . $zip . ' · ' . $sizeTxt;
-$estimate = $sqft > 0 ? '$' . number_format(max($sqft, 500) * 3.99, 0) . ' base at $3.99/sq ft (500 sq ft min), before add-ons' : 'n/a';
-$body = "Name: $name\nPhone: $phonePretty\nEmail: $email\nZIP: $zip\nApprox. sq ft: $sizeTxt\nCurrent floor: " . ($floor ?: 'not given') . "\nBase estimate: $estimate\nService: $service\nLanguage: " . strtoupper($lang) . "\nPage: $page"
+$smallJob = $sqft > 0 && $sqft < 500;
+$subject = ($inArea ? '' : '[CHECK AREA] ') . ($smallJob ? '[UNDER 500 - CUSTOM QUOTE] ' : '') . 'New LVP $3.99 lead: ' . $zip . ' · ' . $sizeTxt;
+$estimate = $smallJob ? 'CUSTOM QUOTE: under 500 sq ft, package prices do not apply (site showed no price)' : ($sqft > 0 ? '$' . number_format($sqft * 3.99, 0) . ' base at $3.99/sq ft (500 sq ft min), before add-ons' : 'n/a');
+$body = "Name: $name\nPhone: $phonePretty\nEmail: $email\nZIP: $zip\nApprox. sq ft: $sizeTxt\nCurrent floor: " . ($floor ?: 'not given') . "\nBase estimate: $estimate\nService: $service\nPage: $page"
   . ($quote !== '' ? "\n$quote" : '')
   . ($details !== '' ? "\nDetails: $details" : '')
   . "\nSource: jaxtileandlvp.com"

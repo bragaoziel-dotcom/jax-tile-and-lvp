@@ -66,7 +66,7 @@ for(const rel of htmlFiles){
 for(const required of [
   'index.html','vinyl-flooring-jacksonville/index.html','tile-installation-jacksonville/index.html',
   'floor-removal-preparation/index.html','service-areas/index.html','projects/index.html',
-  'contact/index.html','portugues/index.html','privacy/index.html','robots.txt','sitemap.xml',
+  'contact/index.html','privacy/index.html','robots.txt','sitemap.xml',
   'assets/google-tracking.js','assets/site.js','api/lead.php'
 ]) if(!exists(required)) err(`required file missing: ${required}`);
 

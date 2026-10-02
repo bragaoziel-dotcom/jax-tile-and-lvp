@@ -53,9 +53,6 @@ function localFallbackReply(string $message): string {
     if (preg_match('/phone|call|contact|number/u', $m)) {
         return 'You can call or text Jax Tile & LVP at (904) 520-1994. Is your project tile or LVP/vinyl?';
     }
-    if (preg_match('/portugu[eê]s|fala portugu[eê]s|pt-br/u', $m)) {
-        return 'Sim. Atendemos em português para projetos de piso vinílico/LVP e instalação de tile. Seu projeto é de LVP/vinil ou tile?';
-    }
 
     return 'I can help with LVP/vinyl flooring, tile installation, service areas and free estimates. Is your project tile or LVP/vinyl?';
 }

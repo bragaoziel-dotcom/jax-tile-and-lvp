@@ -17,16 +17,16 @@ Legacy/cross-business tracking IDs are blocked by CI.
 
 ## Included
 
-- LVP-only sales landing page: Promo $3.99 / Plus $4.49 / Premium from $4.99 per sq ft installed (500 sq ft minimum), 60-second price quiz, add-on price table, EN/PT pages
+- LVP-only sales landing page: Promo $3.99 / Plus $4.49 / Premium from $4.99 per sq ft installed (500 sq ft minimum), 60-second price quiz, add-on price table; English-only (under 500 sq ft = custom quote, no price shown)
 - Real Braga Remodeling LVP project imagery stored locally in Jax assets
 - Optimized WebP brand logo for visible page use
 - Call and SMS CTAs using `(904) 520-1994`
 - Lead form emailing `braga@bragaremodeling.com`
 - Honeypot, time trap, US phone + 5-digit ZIP validation (320xx/322xx = service area), duplicate suppression and conversion-safe response (out-of-area/no-JS leads are emailed but not counted)
 - Braga AI chat disabled (UI removed, `api/braga-ai.php` returns 410) until a Gemini key and an LVP-only prompt exist
-- Service pages, service-area page, project gallery, Portuguese page and privacy page
-- `robots.txt`, `sitemap.xml`, canonical URLs, hreflang and structured data
-- `.htaccess`: 301 www → apex, 301 `/tile-installation-jacksonville/` → `/`, blocks `/docs`, `/scripts`, `/.github`, `README.md`
+- Service pages, service-area page, project gallery and privacy page
+- `robots.txt`, `sitemap.xml`, canonical URLs and structured data
+- `.htaccess`: 301 www → apex, 301 `/tile-installation-jacksonville/` → `/`, 301 `/portugues/` (and `/pt/`, `/es/`) → `/`, blocks `/docs`, `/scripts`, `/.github`, `README.md`
 
 ## Placeholders to fill (search the repo for `TODO(Oziel)`)
 
