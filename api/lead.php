@@ -87,5 +87,115 @@ $sent = mail('braga@bragaremodeling.com', '=?UTF-8?B?' . base64_encode($subject)
 if (!$sent) respond(['ok' => false, 'message' => 'Unable to send right now.'], 503);
 touch($cache);
 
+// 7) Zoho CRM: create the lead so it shows up in the CRM + safety-net monitor.
+// Best-effort: never blocks the user response. Credentials live OUTSIDE public_html.
+sendToZoho([
+    'name' => $name,
+    'email' => $email,
+    'phone' => $phonePretty,
+    'zip' => $zip,
+    'sqft' => $sqft > 0 ? (string)$sqft : '',
+    'service' => $service,
+    'floor' => $floor,
+    'details' => $details,
+    'page' => $page,
+    'quote' => $quote,
+    'estimate' => $estimate,
+    'tracking' => $tracking,
+    'flags' => $flags,
+]);
+
 // Only real, in-area leads with JS timing count as a Google Ads / GA4 / Meta conversion.
 respond(['ok' => true, 'trackConversion' => $inArea && $elapsed !== null]);
+
+/**
+ * Create a Lead in Zoho CRM (best-effort, 8s total budget).
+ * Config: /home/<user>/.zoho-jax-config.php  (NOT in public_html)
+ * Format: <?php return ['client_id'=>'...','client_secret'=>'...','refresh_token'=>'...'];
+ */
+function sendToZoho(array $lead): void
+{
+    $home = getenv('HOME') ?: (function_exists('posix_getpwuid') ? posix_getpwuid(posix_geteuid())['dir'] : '');
+    $configFile = rtrim($home, '/') . '/.zoho-jax-config.php';
+    if ($home === '' || !is_file($configFile)) return;
+    $cfg = @include $configFile;
+    if (!is_array($cfg) || empty($cfg['client_id']) || empty($cfg['client_secret']) || empty($cfg['refresh_token'])) return;
+
+    $deadline = microtime(true) + 8;
+
+    // Refresh the access token.
+    $tokenRes = zohoCurl('https://accounts.zoho.com/oauth/v2/token', [
+        CURLOPT_POST => true,
+        CURLOPT_POSTFIELDS => http_build_query([
+            'refresh_token' => $cfg['refresh_token'],
+            'client_id' => $cfg['client_id'],
+            'client_secret' => $cfg['client_secret'],
+            'grant_type' => 'refresh_token',
+        ]),
+    ], $deadline);
+    if ($tokenRes === null) return;
+    $tokenData = json_decode($tokenRes, true);
+    $accessToken = $tokenData['access_token'] ?? '';
+    $apiDomain = rtrim($tokenData['api_domain'] ?? 'https://www.zohoapis.com', '/');
+    if ($accessToken === '') return;
+
+    // Split "First Last" for Zoho's required Last_Name.
+    $parts = preg_split('/\s+/', trim($lead['name']), 2);
+    $firstName = $parts[0] ?? $lead['name'];
+    $lastName = $parts[1] ?? $parts[0] ?? $lead['name'];
+
+    $description = implode("\n", array_filter([
+        'Service Requested: ' . $lead['service'],
+        $lead['details'] !== '' ? 'Message: ' . $lead['details'] : null,
+        $lead['zip'] !== '' ? 'ZIP: ' . $lead['zip'] : null,
+        $lead['sqft'] !== '' ? 'Approx. sq ft: ' . $lead['sqft'] : null,
+        $lead['floor'] !== '' ? 'Current floor: ' . $lead['floor'] : null,
+        $lead['estimate'] !== '' && $lead['estimate'] !== 'n/a' ? 'Estimate shown: ' . $lead['estimate'] : null,
+        $lead['page'] !== '' ? 'Source Page: ' . $lead['page'] : null,
+        $lead['quote'] !== '' ? $lead['quote'] : null,
+        'Lead Source: jaxtileandlvp.com',
+        !empty($lead['tracking']) ? 'Attribution: ' . implode('; ', $lead['tracking']) : null,
+        !empty($lead['flags']) ? 'Flags: ' . implode('; ', $lead['flags']) : null,
+        'Captured at: ' . gmdate('c'),
+    ]));
+
+    $payload = json_encode(['data' => [[
+        'First_Name' => mb_substr($firstName, 0, 40),
+        'Last_Name' => mb_substr($lastName, 0, 80),
+        'Phone' => $lead['phone'] ?: null,
+        'Email' => $lead['email'] !== '' ? $lead['email'] : null,
+        'Zip_Code' => $lead['zip'] !== '' ? $lead['zip'] : null,
+        'Company' => 'Jax Tile & LVP Website Lead',
+        'Lead_Source' => 'Jax Tile LVP',
+        'Description' => $description,
+    ]]]);
+
+    zohoCurl($apiDomain . '/crm/v2/Leads', [
+        CURLOPT_POST => true,
+        CURLOPT_HTTPHEADER => [
+            'Authorization: Zoho-oauthtoken ' . $accessToken,
+            'Content-Type: application/json',
+        ],
+        CURLOPT_POSTFIELDS => $payload,
+    ], $deadline);
+    // Response intentionally ignored: duplicate/outage must not break the form.
+}
+
+/** Minimal curl wrapper with a shared deadline. Returns body string or null. */
+function zohoCurl(string $url, array $opts, float $deadline): ?string
+{
+    $remaining = $deadline - microtime(true);
+    if ($remaining <= 0.5) return null;
+    $ch = curl_init($url);
+    curl_setopt_array($ch, $opts + [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT_MS => (int)($remaining * 1000),
+        CURLOPT_CONNECTTIMEOUT_MS => 3000,
+        CURLOPT_SSL_VERIFYPEER => true,
+    ]);
+    $body = curl_exec($ch);
+    $httpCode = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    if ($body === false || $httpCode < 200 || $httpCode >= 300) return null;
+    return (string)$body;
+}
