@@ -115,10 +115,19 @@ respond(['ok' => true, 'trackConversion' => $inArea && $elapsed !== null]);
  */
 function sendToZoho(array $lead): void
 {
+    $candidates = [];
     $home = getenv('HOME') ?: (function_exists('posix_getpwuid') ? posix_getpwuid(posix_geteuid())['dir'] : '');
-    $configFile = rtrim($home, '/') . '/.zoho-jax-config.php';
-    if ($home === '' || !is_file($configFile)) return;
-    $cfg = @include $configFile;
+    if ($home !== '') $candidates[] = rtrim($home, '/') . '/.zoho-jax-config.php';
+    // Hostinger: domain home is <account-home>/domains/<domain>
+    $docRoot = realpath(__DIR__ . '/..');
+    if ($docRoot !== false) {
+        $candidates[] = dirname($docRoot) . '/.zoho-jax-config.php'; // domains/<domain>/
+        $candidates[] = dirname(dirname($docRoot)) . '/.zoho-jax-config.php'; // account home
+    }
+    $cfg = null;
+    foreach ($candidates as $configFile) {
+        if (is_file($configFile)) { $cfg = @include $configFile; break; }
+    }
     if (!is_array($cfg) || empty($cfg['client_id']) || empty($cfg['client_secret']) || empty($cfg['refresh_token'])) return;
 
     $deadline = microtime(true) + 8;
