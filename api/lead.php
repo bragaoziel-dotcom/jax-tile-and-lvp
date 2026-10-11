@@ -39,8 +39,8 @@ $inArea = $zip !== '' && (bool)preg_match('/^32[02]\d{2}$/', $zip);
 $sqftRaw = preg_replace('/[^\d]/', '', clean('sqft', 8));
 $sqft = $sqftRaw === '' ? 0 : min((int)$sqftRaw, 50000);
 
-$allowedServices = ['LVP Installed', 'Luxury Vinyl Plank / Vinyl'];
-$allowedFloors = ['', 'Carpet', 'Tile', 'Wood / laminate', 'Vinyl / LVP', 'Bare concrete slab', 'Other / not sure'];
+$allowedServices = ['LVP Installed', 'Luxury Vinyl Plank / Vinyl', 'Tile Installation'];
+$allowedFloors = ['', 'Carpet', 'Tile', 'Wood / laminate', 'Vinyl / LVP', 'Bare concrete slab', 'Bare wall or concrete', 'Other / not sure'];
 if (!in_array($floor, $allowedFloors, true)) $floor = 'Other / not sure';
 
 if ($name === '') respond(['ok' => false, 'field' => 'name', 'message' => 'Please enter your name.'], 422);
@@ -73,8 +73,11 @@ if ($smallJob) {
   }
 }
 $tierTxt = $smallTier ? '$' . number_format($smallTier[1]) . ' tier (' . $smallTier[2] . ')' : '';
-$subject = ($inArea ? '' : '[CHECK AREA] ') . ($smallTier ? '[SMALL ROOM ' . $tierTxt . '] New LVP small-room lead: ' : 'New LVP $3.99 lead: ') . $zip . ' · ' . $sizeTxt;
-$estimate = $smallTier ? 'SMALL-ROOM FLAT PRICE ' . $tierTxt . ': in-stock LVP, installation, carpet removal & haul-off, cleanup; add-ons extra; tier confirmed at free measure' : ($sqft > 0 ? '$' . number_format($sqft * 3.99, 0) . ' base at $3.99/sq ft (package, 500+ sq ft), before add-ons' : 'n/a');
+$isTile = $service === 'Tile Installation';
+$subject = ($inArea ? '' : '[CHECK AREA] ') . ($isTile ? 'New tile installation lead: ' : ($smallTier ? '[SMALL ROOM ' . $tierTxt . '] New LVP small-room lead: ' : 'New LVP $3.99 lead: ')) . $zip . ' · ' . $sizeTxt;
+$estimate = $isTile
+    ? 'Tile installation: custom quote after free measure (no published package price)'
+    : ($smallTier ? 'SMALL-ROOM FLAT PRICE ' . $tierTxt . ': in-stock LVP, installation, carpet removal & haul-off, cleanup; add-ons extra; tier confirmed at free measure' : ($sqft > 0 ? '$' . number_format($sqft * 3.99, 0) . ' base at $3.99/sq ft (package, 500+ sq ft), before add-ons' : 'n/a'));
 $body = "Name: $name\nPhone: $phonePretty\nEmail: $email\nZIP: $zip\nApprox. sq ft: $sizeTxt\nCurrent floor: " . ($floor ?: 'not given') . "\nBase estimate: $estimate\nService: $service\nPage: $page"
   . ($quote !== '' ? "\n$quote" : '')
   . ($details !== '' ? "\nDetails: $details" : '')
@@ -110,11 +113,23 @@ respond(['ok' => true, 'trackConversion' => $inArea && $elapsed !== null]);
 
 /**
  * Create a Lead in Zoho CRM (best-effort, 8s total budget).
- * Config: /home/<user>/.zoho-jax-config.php  (NOT in public_html)
+ * Credentials are never stored in this file.
+ * Prefer environment variables (Hostinger PHP env or the server environment):
+ *   JAX_ZOHO_CLIENT_ID, JAX_ZOHO_CLIENT_SECRET, JAX_ZOHO_REFRESH_TOKEN
+ * Fallback, still outside the web root: /home/<user>/.zoho-jax-config.php
  * Format: <?php return ['client_id'=>'...','client_secret'=>'...','refresh_token'=>'...'];
  */
-function sendToZoho(array $lead): void
+function zohoConfig(): ?array
 {
+    $fromEnv = [
+        'client_id' => (string)(getenv('JAX_ZOHO_CLIENT_ID') ?: ''),
+        'client_secret' => (string)(getenv('JAX_ZOHO_CLIENT_SECRET') ?: ''),
+        'refresh_token' => (string)(getenv('JAX_ZOHO_REFRESH_TOKEN') ?: ''),
+    ];
+    if ($fromEnv['client_id'] !== '' && $fromEnv['client_secret'] !== '' && $fromEnv['refresh_token'] !== '') {
+        return $fromEnv;
+    }
+
     $candidates = [];
     $home = getenv('HOME') ?: (function_exists('posix_getpwuid') ? posix_getpwuid(posix_geteuid())['dir'] : '');
     if ($home !== '') $candidates[] = rtrim($home, '/') . '/.zoho-jax-config.php';
@@ -124,10 +139,18 @@ function sendToZoho(array $lead): void
         $candidates[] = dirname($docRoot) . '/.zoho-jax-config.php'; // domains/<domain>/
         $candidates[] = dirname(dirname($docRoot)) . '/.zoho-jax-config.php'; // account home
     }
-    $cfg = null;
     foreach ($candidates as $configFile) {
-        if (is_file($configFile)) { $cfg = @include $configFile; break; }
+        if (is_file($configFile)) {
+            $cfg = @include $configFile;
+            if (is_array($cfg)) return $cfg;
+        }
     }
+    return null;
+}
+
+function sendToZoho(array $lead): void
+{
+    $cfg = zohoConfig();
     if (!is_array($cfg) || empty($cfg['client_id']) || empty($cfg['client_secret']) || empty($cfg['refresh_token'])) return;
 
     $deadline = microtime(true) + 8;

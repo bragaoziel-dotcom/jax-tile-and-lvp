@@ -83,7 +83,13 @@ if(exists('assets/site.js')){
   if(!site.includes('if(result.trackConversion)')) err('assets/site.js: generate_lead must be gated by backend trackConversion');
 }
 
-if(exists('api/lead.php') && !read('api/lead.php').includes('trackConversion')) err('api/lead.php: conversion-safe response missing');
+if(exists('api/lead.php')){
+  const lead = read('api/lead.php');
+  if(!lead.includes('trackConversion')) err('api/lead.php: conversion-safe response missing');
+  if(!lead.includes('Tile Installation')) err('api/lead.php: tile leads must be an allowed service');
+  if(!lead.includes('JAX_ZOHO_CLIENT_ID')) err('api/lead.php: Zoho credentials must be read from the environment');
+  if(/client_secret'\s*=>\s*'[^'.\s][^']*'/.test(lead) || /refresh_token'\s*=>\s*'[^'.\s][^']*'/.test(lead)) err('api/lead.php: hardcoded Zoho secret');
+}
 
 if(exists('robots.txt')){
   const robots = read('robots.txt');
@@ -91,15 +97,46 @@ if(exists('robots.txt')){
   if(!/Disallow:\s*\/api\//i.test(robots)) err('robots.txt: /api/ should be crawl-blocked');
 }
 
+function canonicalHref(html){
+  const tag = html.match(/<link\b[^>]*\brel=["']canonical["'][^>]*>/i);
+  if(!tag) return '';
+  const href = tag[0].match(/\bhref=["']([^"']+)["']/i);
+  return href ? href[1] : '';
+}
+
 if(exists('sitemap.xml')){
   const sitemap = read('sitemap.xml');
   const locs = [...sitemap.matchAll(/<loc>(https:\/\/jaxtileandlvp\.com\/[^<]*)<\/loc>/g)].map(m=>m[1]);
   if(!locs.length) err('sitemap.xml: no jaxtileandlvp.com URLs found');
+  const requiredLocs = [
+    'https://jaxtileandlvp.com/',
+    'https://jaxtileandlvp.com/vinyl-flooring-jacksonville/',
+    'https://jaxtileandlvp.com/tile-installation-jacksonville/',
+  ];
+  for(const url of requiredLocs) if(!locs.includes(url)) err(`sitemap.xml: missing canonical URL ${url}`);
   for(const url of locs){
+    if(/\.html(?:$|\?)/i.test(url)) err(`sitemap.xml: non-canonical .html URL ${url}`);
     const p = new URL(url).pathname;
+    if(p !== '/' && !p.endsWith('/')) err(`sitemap.xml: URL must be the trailing-slash canonical form: ${url}`);
     const target = urlToFile(p);
     if(!exists(target)) err(`sitemap.xml: URL has no matching file: ${url} -> ${target}`);
+    else if(canonicalHref(read(target)) !== url) err(`${target}: canonical must equal sitemap URL ${url}`);
   }
+}
+
+for(const rel of ['vinyl-flooring-jacksonville/index.html','tile-installation-jacksonville/index.html']){
+  if(!exists(rel)) continue;
+  const html = read(rel);
+  if(!html.includes('FAQPage')) err(`${rel}: FAQPage JSON-LD missing`);
+  if(!/<details[\s>]/i.test(html)) err(`${rel}: visible FAQ missing`);
+  if(!html.includes('Braga Remodeling')) err(`${rel}: must state the page is operated by Braga Remodeling`);
+}
+
+for(const rel of htmlFiles){
+  if(rel === '404.html') continue;
+  const html = read(rel);
+  if(/AggregateRating|reviewCount|ratingValue/i.test(html)) err(`${rel}: self-serving rating markup is not allowed`);
+  if(!html.includes('(904) 520-1994') && !html.includes('+1-904-520-1994') && !html.includes('+19045201994')) err(`${rel}: NAP phone missing`);
 }
 
 if(errors.length){
