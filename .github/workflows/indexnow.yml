@@ -1,0 +1,145 @@
+name: IndexNow
+
+# After a push to main, Hostinger Git deploys the site. Once the live
+# IndexNow key file is reachable, submit every URL in the live sitemap to
+# https://api.indexnow.org/indexnow so Bing (and engines that share that
+# index, including ChatGPT/Copilot search) can re-crawl jaxtileandlvp.com.
+#
+# The key file is <key>.txt at the site root. Its body is the key. This
+# workflow reads that file from the commit; it does not use a second copy.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  submit:
+    name: Submit live sitemap to IndexNow
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Read IndexNow key
+        id: key
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t files < <(find . -maxdepth 1 -type f -regextype posix-extended -regex '\./[A-Za-z0-9-]{8,128}\.txt' ! -name 'robots.txt' | sort)
+          if [ "${#files[@]}" -ne 1 ]; then
+            echo "::error::Expected exactly one IndexNow key file at the repo root."
+            printf '%s\n' "${files[@]:-}"
+            exit 1
+          fi
+          file="${files[0]#./}"
+          key="${file%.txt}"
+          body=$(tr -d '[:space:]' < "$file")
+          if [ "$body" != "$key" ]; then
+            echo "::error::Key file body does not match its filename."
+            exit 1
+          fi
+          echo "key=$key" >> "$GITHUB_OUTPUT"
+          echo "IndexNow key file: ${file}"
+
+      - name: Wait until the live key file matches this deploy
+        env:
+          INDEXNOW_KEY: ${{ steps.key.outputs.key }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          url="https://jaxtileandlvp.com/${INDEXNOW_KEY}.txt"
+          # Hostinger Git auto-deploy lags the push. Poll until the key file
+          # from this commit is what the apex host returns.
+          sleep 20
+          for attempt in $(seq 1 12); do
+            code="000"
+            if curl --silent --show-error --location --max-time 20 \
+              --output /tmp/indexnow-key-body --write-out '%{http_code}' \
+              "$url" > /tmp/indexnow-key-code; then
+              code=$(tr -d '[:space:]' < /tmp/indexnow-key-code)
+            fi
+            body=$(tr -d '[:space:]' < /tmp/indexnow-key-body 2>/dev/null || true)
+            echo "Key file attempt ${attempt}/12: HTTP ${code} ${url}"
+            if [ "$code" = "200" ] && [ "$body" = "$INDEXNOW_KEY" ]; then
+              echo "Live key file is reachable."
+              exit 0
+            fi
+            sleep 15
+          done
+          echo "::error::Live IndexNow key file was not reachable with the expected key: ${url}"
+          exit 1
+
+      - name: Submit live sitemap URLs to IndexNow
+        env:
+          INDEXNOW_KEY: ${{ steps.key.outputs.key }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          host="jaxtileandlvp.com"
+          key_location="https://${host}/${INDEXNOW_KEY}.txt"
+          sitemap_url="https://${host}/sitemap.xml"
+
+          sitemap=$(curl --fail --silent --show-error --location --max-time 20 "$sitemap_url")
+          mapfile -t urls < <(printf '%s\n' "$sitemap" | grep -oE '<loc>[^<]+</loc>' | sed -E 's#</?loc>##g')
+          if [ "${#urls[@]}" -eq 0 ]; then
+            echo "::error::Live sitemap contained no URLs: ${sitemap_url}"
+            exit 1
+          fi
+          echo "Submitting ${#urls[@]} URL(s) from ${sitemap_url}"
+          printf ' - %s\n' "${urls[@]}"
+
+          payload=$(printf '%s\n' "${urls[@]}" | jq -Rn \
+            --arg host "$host" \
+            --arg key "$INDEXNOW_KEY" \
+            --arg keyLocation "$key_location" \
+            '{host:$host, key:$key, keyLocation:$keyLocation, urlList:[inputs]}')
+
+          code="000"
+          for attempt in 1 2 3; do
+            set +e
+            code=$(curl --silent --show-error --location --max-time 30 \
+              --output /tmp/indexnow-response.txt \
+              --write-out '%{http_code}' \
+              -X POST "https://api.indexnow.org/indexnow" \
+              -H "Content-Type: application/json; charset=utf-8" \
+              --data "$payload")
+            curl_status=$?
+            set -e
+            if [ "$curl_status" -ne 0 ]; then
+              echo "IndexNow attempt ${attempt}/3 failed at the network layer (curl exit ${curl_status})."
+              code="000"
+            else
+              echo "IndexNow attempt ${attempt}/3 HTTP status: ${code}"
+              echo "IndexNow response body:"
+              cat /tmp/indexnow-response.txt 2>/dev/null || true
+              echo
+            fi
+            case "$code" in
+              200|202) break ;;
+              408|429|500|502|503|504|000)
+                if [ "$attempt" -lt 3 ]; then
+                  echo "Transient IndexNow response. Retrying."
+                  sleep 20
+                fi
+                ;;
+              *) break ;;
+            esac
+          done
+
+          echo "IndexNow response code: ${code}"
+          case "$code" in
+            200|202)
+              echo "IndexNow accepted the URL list."
+              ;;
+            408|429|500|502|503|504|000)
+              echo "::warning::IndexNow returned a transient error (HTTP ${code}). Not failing the build."
+              ;;
+            *)
+              echo "::error::IndexNow rejected the submission (HTTP ${code})."
+              exit 1
+              ;;
+          esac
