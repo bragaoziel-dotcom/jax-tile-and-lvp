@@ -26,7 +26,8 @@ Legacy/cross-business tracking IDs are blocked by CI.
 - Braga AI chat disabled (UI removed, `api/braga-ai.php` returns 410) until a Gemini key and an LVP-only prompt exist
 - Service pages, service-area page, project gallery and privacy page
 - `robots.txt`, `sitemap.xml`, canonical URLs and structured data
-- `.htaccess`: 301 www → apex, 301 `/tile-installation-jacksonville/` → `/`, 301 `/portugues/` (and `/pt/`, `/es/`) → `/`, blocks `/docs`, `/scripts`, `/.github`, `README.md`
+- `.htaccess`: 301 www → apex, 301 legacy `*.html` and `/index.html` copies → the trailing-slash canonical URL, 301 `/portugues/` (and `/pt/`, `/es/`) → `/`, blocks `/docs`, `/scripts`, `/.github`, `README.md`
+- Tile installation is a real page again (`/tile-installation-jacksonville/`). It is quoted after a measure and is not the $3.99 LVP package. Do not redirect it back to the homepage.
 
 ## Placeholders to fill (search the repo for `TODO(Oziel)`)
 
@@ -39,6 +40,14 @@ Legacy/cross-business tracking IDs are blocked by CI.
 Deploy the generated GitHub Actions artifact `jax-tile-and-lvp-production` to the document root for `jaxtileandlvp.com`. The artifact contains the validated production files only and excludes repository tooling/documentation.
 
 PHP `mail()` must be enabled or replaced with the site's authenticated mail provider.
+
+Zoho CRM credentials are not in the repository. `api/lead.php` reads them from the environment first:
+
+- `JAX_ZOHO_CLIENT_ID`
+- `JAX_ZOHO_CLIENT_SECRET`
+- `JAX_ZOHO_REFRESH_TOKEN`
+
+If those are unset, it falls back to a PHP config file outside the web root (`~/.zoho-jax-config.php`, or the Hostinger domain/account home). Do not commit that file.
 
 Add the Gemini key outside public files. In WordPress/PHP hosting, keep it server-side; for example in `wp-config.php`:
 
@@ -76,4 +85,4 @@ Google Ads conversion actions for Jax must remain separate from Braga Remodeling
 
 CI validates required pages/assets, metadata, canonical/H1 coverage, internal links, JSON-LD, robots/sitemap consistency, production tracking IDs, absence of legacy IDs, analytics PII safety, optimized logo usage and local project-image assets.
 
-Do not add invented reviews, certifications, guarantees, licenses, thin doorway pages or copied competitor content.
+Do not add invented reviews, certifications, guarantees, licenses, street addresses, thin doorway pages or content copied from bragaremodeling.com. Jax Tile & LVP is a trade name of Braga Remodeling / MB FLOOR AND TILE INSTALLATIONS LLC. Keep the phone at (904) 520-1994. This site stays limited to tile installation and the fixed-price LVP package.
