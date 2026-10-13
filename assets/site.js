@@ -39,7 +39,7 @@ if(INSTAGRAM_URL){document.querySelectorAll('.js-instagram').forEach(link=>{link
 document.querySelectorAll('.js-instagram').forEach(link=>link.addEventListener('click',()=>dataLayerPush('social_click',{social_network:'instagram',cta_location:ctaLocation(link)})));
 
 // ---------- 60-second price quiz ----------
-const PRICING={promo:3.99,plus:4.49,premium:4.99,minSqft:500,shoeLF:2.99,lfPerSqftLow:.30,lfPerSqftHigh:.45,roomSqft:170,measureSlack:.10,smallTiers:[[150,895,'up to 150 sq ft'],[250,1195,'151–250 sq ft'],[350,1495,'251–350 sq ft'],[499,1895,'351–499 sq ft']],removal:{carpet:[0,0],tile:[2.00,2.50],glued:[2.00,2.50],floating:[.75,.75],concrete:[0,0]},stairs:{'0':[0,0],few:[1,5],one:[12,14],two:[24,28]},stairLow:85,stairHigh:110};
+const PRICING={promo:3.99,plus:4.49,premium:4.99,minSqft:500,shoeLF:2.99,lfPerSqftLow:.30,lfPerSqftHigh:.45,roomSqft:170,measureSlack:.10,smallTiers:[[150,895,'up to 150 sq ft'],[250,1195,'151–250 sq ft'],[350,1495,'251–350 sq ft'],[499,1895,'351–499 sq ft']],removal:{carpet:[.50,.50],tile:[2.00,2.00],glued:[2.00,2.00],floating:[.75,.75],concrete:[0,0]},dumpster:400,stairs:{'0':[0,0],few:[1,5],one:[12,14],two:[24,28]},stairLow:85,stairHigh:110};
 const money=n=>'$'+Math.round(n).toLocaleString('en-US');
 const smallTier=s=>{const r=Math.round(s);return r<PRICING.minSqft?PRICING.smallTiers.find(t=>r<=t[0])||null:null;};
 const quiz=document.querySelector('#lvp-quiz');
@@ -56,14 +56,14 @@ if(quiz){
   const bucket=s=>s<500?'<500':s<1000?'500-999':s<1500?'1000-1499':s<2500?'1500-2499':'2500+';
   function compute(){
     const sqft=sqftOf(),hi=sqft*(1+PRICING.measureSlack),bL=Math.max(sqft,PRICING.minSqft),bH=Math.max(hi,PRICING.minSqft);
-    const [rL,rH]=PRICING.removal[val('q_floor')]||[0,0],remL=sqft*rL,remH=hi*rH;
+    const floor=val('q_floor'),[rL,rH]=PRICING.removal[floor]||[0,0],remL=sqft*rL,remH=hi*rH;const dump=(rH>0||rL>0)?PRICING.dumpster:0;
     const [sL,sH]=PRICING.stairs[val('q_stairs')]||[0,0],stL=sL*PRICING.stairLow,stH=sH*PRICING.stairHigh;
     const shoe=val('q_shoe'),lfL=Math.round(sqft*PRICING.lfPerSqftLow),lfH=Math.round(hi*PRICING.lfPerSqftHigh);
     const shL=shoe==='yes'?lfL*PRICING.shoeLF:0,shH=shoe==='no'?0:lfH*PRICING.shoeLF;
     const range=(a,b)=>Math.round(a)===Math.round(b)?money(a):`${money(a)}–${money(b)}`;
-    const promo=[bL*PRICING.promo+remL+stL+shL,bH*PRICING.promo+remH+stH+shH];
-    const plus=[bL*PRICING.plus+remL+stL,bH*PRICING.plus+remH+stH];
-    const premium=bL*PRICING.premium+remL+stL+shL;
+    const promo=[bL*PRICING.promo+remL+stL+shL+dump,bH*PRICING.promo+remH+stH+shH+dump];
+    const plus=[bL*PRICING.plus+remL+stL+dump,bH*PRICING.plus+remH+stH+dump];
+    const premium=bL*PRICING.premium+remL+stL+shL+dump;
     quiz.querySelector('.q-size').textContent=T.size.replace('{s}',Math.round(sqft).toLocaleString('en-US'))+(smallTier(sqft)?T.min:'');
     const tier=smallTier(sqft),small=!!tier;
     quiz.dataset.quote=small?'small_flat':'package';
@@ -73,12 +73,12 @@ if(quiz){
     if(formHead){formHead.dataset.def=formHead.dataset.def||formHead.textContent;formHead.textContent=small?'Want this flat price? Leave your number and we’ll text you to book the free measure.':formHead.dataset.def;}
     if(formBtn){formBtn.dataset.def=formBtn.dataset.def||formBtn.textContent;formBtn.textContent=small?'Text Me My Flat Price':formBtn.dataset.def;}
     if(small){
-      const flat=tier[1],xL=remL+stL+shL,xH=remH+stH+shH;
+      const flat=tier[1],xL=remL+stL+shL+dump,xH=remH+stH+shH+dump;
       quiz.querySelector('.q-flat').textContent=money(flat);
       quiz.querySelector('.q-tier').textContent='Flat price for '+tier[2]+(xH?' · plus the add-ons below':'');
       const list=quiz.querySelector('#calc-breakdown');list.replaceChildren();
       const lines=[['Small-room flat price ('+tier[2]+')',flat,flat]];
-      if(remH)lines.push([T.rem,remL,remH]);if(stH)lines.push([T.stairs+` (${sL}–${sH})`,stL,stH]);if(shH)lines.push([(shoe==='yes'?'Shoe molding':'Shoe molding, if wanted')+` (~${lfL}–${lfH} LF)`,shL,shH]);
+      if(remH)lines.push([T.rem,remL,remH]);if(dump)lines.push(['Dumpster (haul-away)',dump,dump]);if(stH)lines.push([T.stairs+` (${sL}–${sH})`,stL,stH]);if(shH)lines.push([(shoe==='yes'?'Shoe molding':'Shoe molding, if wanted')+` (~${lfL}–${lfH} LF)`,shL,shH]);
       if(xH)lines.push(['Estimated total',flat+xL,flat+xH]);
       lines.forEach(([label,a,b])=>{const li=document.createElement('li');const sp=document.createElement('span');sp.textContent=label;const v=document.createElement('b');v.textContent=range(a,b);li.append(sp,v);list.appendChild(li);});
       calcSummary=`Quiz: ~${Math.round(sqft)} sq ft; SMALL-ROOM FLAT PRICE ${money(flat)} (${tier[2]} tier)`+(xH?`; add-ons ${range(xL,xH)}; est. total ${range(flat+xL,flat+xH)}`:'')+`; floor ${val('q_floor')}; stairs ${val('q_stairs')}; shoe ${shoe}`;
@@ -89,7 +89,7 @@ if(quiz){
     quiz.querySelector('.q-premium').textContent=T.from+money(premium);
     const list=quiz.querySelector('#calc-breakdown');list.replaceChildren();
     const lines=[[T.base+' (Promo)',bL*PRICING.promo,bH*PRICING.promo]];
-    if(remH)lines.push([T.rem,remL,remH]);if(stH)lines.push([T.stairs+` (${sL}–${sH})`,stL,stH]);if(shH)lines.push([(shoe==='yes'?T.shoe:T.shoeUnsure)+` (~${lfL}–${lfH} LF)`,shL,shH]);
+    if(remH)lines.push([T.rem,remL,remH]);if(dump)lines.push(['Dumpster (haul-away)',dump,dump]);if(stH)lines.push([T.stairs+` (${sL}–${sH})`,stL,stH]);if(shH)lines.push([(shoe==='yes'?T.shoe:T.shoeUnsure)+` (~${lfL}–${lfH} LF)`,shL,shH]);
     lines.forEach(([label,a,b])=>{const li=document.createElement('li');const s=document.createElement('span');s.textContent=label;const v=document.createElement('b');v.textContent=range(a,b);li.append(s,v);list.appendChild(li);});
     calcSummary=`Quiz: ~${Math.round(sqft)} sq ft; floor ${val('q_floor')}; stairs ${val('q_stairs')}; shoe ${shoe}; Promo ${range(...promo)}; Plus ${range(...plus)}; Premium from ${money(premium)}`;
     const form=document.querySelector('#calc-lead-form');
