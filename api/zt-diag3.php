@@ -43,3 +43,6 @@ ztSend('B no-amp', 'https://api.zeptomail.com/v1.1/email', $b, $token);
 // C: minimal payload (no names at all)
 $c = ['from' => ['address' => $from], 'to' => [['email_address' => ['address' => 'braga@bragaremodeling.com']]], 'subject' => 'DIAG ZT3 variant C', 'textbody' => 'minimal'];
 ztSend('C minimal', 'https://api.zeptomail.com/v1.1/email', $c, $token);
+// D: mirror the WORKING Braga Node payload exactly: htmlbody + textbody both present
+$d = $base; $d['subject'] = 'DIAG ZT3 variant D'; $d['htmlbody'] = '<p>variant test</p>';
+ztSend('D html+text', 'https://api.zeptomail.com/v1.1/email', $d, $token);
