@@ -86,8 +86,18 @@ $body = "Name: $name\nPhone: $phonePretty\nEmail: $email\nZIP: $zip\nApprox. sq 
   . ($tracking ? "\n\nAttribution:\n" . implode("\n", $tracking) : '');
 $headers = "From: Jax Tile & LVP <wordpress@jaxtileandlvp.com>\r\n" . ($email !== '' ? 'Reply-To: ' . $email . "\r\n" : '') . "Content-Type: text/plain; charset=UTF-8\r\n";
 
-$sent = mail('braga@bragaremodeling.com', '=?UTF-8?B?' . base64_encode($subject) . '?=', $body, $headers);
-if (!$sent) respond(['ok' => false, 'message' => 'Unable to send right now.'], 503);
+// Envelope sender MUST be an address @jaxtileandlvp.com (5th mail() arg, -f).
+// Without it, Hostinger shared sendmail uses noreply@<server>.main-hosting.eu as the
+// envelope sender: SPF then checks the server domain, nothing aligns with
+// jaxtileandlvp.com, DMARC fails, and Gmail silently drops the message even though
+// mail() returns true (deliveries stopped after 2026-10-11 with mail() still
+// returning success). With -f, SPF (v=spf1 include:_spf.mail.hostinger.com) aligns
+// with the From domain and DMARC passes via SPF.
+$sent = mail('braga@bragaremodeling.com', '=?UTF-8?B?' . base64_encode($subject) . '?=', $body, $headers, '-fwordpress@jaxtileandlvp.com');
+if (!$sent) {
+    error_log('[jax-lead] mail() failed for lead from page ' . $page . ' ZIP ' . $zip);
+    respond(['ok' => false, 'message' => 'Unable to send right now.'], 503);
+}
 touch($cache);
 
 // 7) Zoho CRM: create the lead so it shows up in the CRM + safety-net monitor.
