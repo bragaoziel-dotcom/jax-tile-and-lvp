@@ -205,6 +205,13 @@ function zeptoConfig(): ?array
         }
     }
     if ($token === '' || $from === '') return null;
+    // The stored value may carry the full "Zoho-enczapikey " scheme prefix
+    // (that is how the ZeptoMail console presents the key, and how it ended
+    // up in the BRAGA app's .env). Sending the prefix twice makes the
+    // ZeptoMail backend answer a bare HTTP 500 — strip it, like the Braga
+    // app's own client does.
+    $token = (string)preg_replace('/^Zoho-enczapikey\s+/i', '', trim($token));
+    if ($token === '') return null;
     return ['token' => $token, 'from' => $from];
 }
 
