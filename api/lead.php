@@ -153,12 +153,49 @@ function jaxConfigFile(): ?array
 }
 
 /**
- * ZeptoMail credentials: env JAX_ZEPTOMAIL_TOKEN / JAX_ZEPTOMAIL_FROM first,
- * else zeptomail_token / zeptomail_from keys in the server config file.
+ * Read one KEY=value from the BRAGA app's .env (same hosting account).
+ * The hPanel env editor is the single, working rotation point for the
+ * ZeptoMail token (the File Manager editor cannot be written by our
+ * automation), so the Jax site resolves the token from there first.
+ * The value is never logged.
+ */
+function bragaEnvValue(string $key): string
+{
+    $candidates = [];
+    $home = (string)(getenv('HOME') ?: '');
+    if ($home !== '') $candidates[] = rtrim($home, '/') . '/domains/bragaremodeling.com/hbuilds/config/.env';
+    $docRoot = realpath(__DIR__ . '/..');
+    if ($docRoot !== false) {
+        // domains/<this-domain>/ -> domains/bragaremodeling.com/...
+        $candidates[] = dirname(dirname($docRoot)) . '/bragaremodeling.com/hbuilds/config/.env';
+    }
+    foreach ($candidates as $file) {
+        if (!is_file($file) || !is_readable($file)) continue;
+        $lines = @file($file, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+        if (!is_array($lines)) continue;
+        foreach ($lines as $ln) {
+            $ln = trim($ln);
+            if ($ln === '' || $ln[0] === '#' || strpos($ln, '=') === false) continue;
+            [$k, $v] = explode('=', $ln, 2);
+            if (trim($k) !== $key) continue;
+            $v = trim($v);
+            if (strlen($v) >= 2 && ($v[0] === '"' || $v[0] === "'")) $v = trim($v, '"\'');
+            return $v;
+        }
+    }
+    return '';
+}
+
+/**
+ * ZeptoMail credentials: env JAX_ZEPTOMAIL_TOKEN first, then the BRAGA
+ * app's .env (ZEPTOMAIL_TOKEN, the live rotation point), then the
+ * zeptomail_token key in the server config file (last resort).
+ * From: env JAX_ZEPTOMAIL_FROM, else zeptomail_from in the config file.
  */
 function zeptoConfig(): ?array
 {
     $token = (string)(getenv('JAX_ZEPTOMAIL_TOKEN') ?: '');
+    if ($token === '') $token = bragaEnvValue('ZEPTOMAIL_TOKEN');
     $from = (string)(getenv('JAX_ZEPTOMAIL_FROM') ?: '');
     if ($token === '' || $from === '') {
         $cfg = jaxConfigFile();
