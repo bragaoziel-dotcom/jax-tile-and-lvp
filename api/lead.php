@@ -86,16 +86,24 @@ $body = "Name: $name\nPhone: $phonePretty\nEmail: $email\nZIP: $zip\nApprox. sq 
   . ($tracking ? "\n\nAttribution:\n" . implode("\n", $tracking) : '');
 $headers = "From: Jax Tile & LVP <wordpress@jaxtileandlvp.com>\r\n" . ($email !== '' ? 'Reply-To: ' . $email . "\r\n" : '') . "Content-Type: text/plain; charset=UTF-8\r\n";
 
-// Envelope sender MUST be an address @jaxtileandlvp.com (5th mail() arg, -f).
-// Without it, Hostinger shared sendmail uses noreply@<server>.main-hosting.eu as the
-// envelope sender: SPF then checks the server domain, nothing aligns with
-// jaxtileandlvp.com, DMARC fails, and Gmail silently drops the message even though
-// mail() returns true (deliveries stopped after 2026-10-11 with mail() still
-// returning success). With -f, SPF (v=spf1 include:_spf.mail.hostinger.com) aligns
-// with the From domain and DMARC passes via SPF.
-$sent = mail('braga@bragaremodeling.com', '=?UTF-8?B?' . base64_encode($subject) . '?=', $body, $headers, '-fwordpress@jaxtileandlvp.com');
+// Notification transport (root-caused 2026-10-13): Hostinger's shared sendmail
+// (hsendmail) silently drops lead-shaped notifications from this domain.
+// Verified by bisection: trivial test mail via mail() reaches
+// braga@bragaremodeling.com instantly, but the lead notification — with the
+// real subject and/or the real body — never arrives, even though mail()
+// returns true (in web AND CLI contexts, with or without an aligned -f
+// envelope sender; SPF/DMARC alignment was NOT the cause). Deliveries stopped
+// after 2026-10-11 12:37 EDT. Primary transport is therefore the ZeptoMail
+// HTTPS API (same transport as bragaremodeling.com): authenticated API send
+// from noreply@bragaremodeling.com, DKIM-signed, bypassing hsendmail entirely.
+// mail() with the aligned envelope sender stays as a fallback only.
+$sent = sendViaZeptoMail($subject, $body, $email);
 if (!$sent) {
-    error_log('[jax-lead] mail() failed for lead from page ' . $page . ' ZIP ' . $zip);
+    error_log('[jax-lead] ZeptoMail transport failed, falling back to mail() for lead from page ' . $page . ' ZIP ' . $zip);
+    $sent = mail('braga@bragaremodeling.com', '=?UTF-8?B?' . base64_encode($subject) . '?=', $body, $headers, '-fwordpress@jaxtileandlvp.com');
+}
+if (!$sent) {
+    error_log('[jax-lead] all notification transports failed for lead from page ' . $page . ' ZIP ' . $zip);
     respond(['ok' => false, 'message' => 'Unable to send right now.'], 503);
 }
 touch($cache);
@@ -120,6 +128,90 @@ sendToZoho([
 
 // Only real, in-area leads with JS timing count as a Google Ads / GA4 / Meta conversion.
 respond(['ok' => true, 'trackConversion' => $inArea && $elapsed !== null]);
+
+/**
+ * Server config file shared by the Zoho CRM and ZeptoMail transports.
+ * Same candidate locations as zohoConfig() (outside the web root).
+ */
+function jaxConfigFile(): ?array
+{
+    $candidates = [];
+    $home = getenv('HOME') ?: (function_exists('posix_getpwuid') ? posix_getpwuid(posix_geteuid())['dir'] : '');
+    if ($home !== '') $candidates[] = rtrim($home, '/') . '/.zoho-jax-config.php';
+    $docRoot = realpath(__DIR__ . '/..');
+    if ($docRoot !== false) {
+        $candidates[] = dirname($docRoot) . '/.zoho-jax-config.php'; // domains/<domain>/
+        $candidates[] = dirname(dirname($docRoot)) . '/.zoho-jax-config.php'; // account home
+    }
+    foreach ($candidates as $configFile) {
+        if (is_file($configFile)) {
+            $cfg = @include $configFile;
+            if (is_array($cfg)) return $cfg;
+        }
+    }
+    return null;
+}
+
+/**
+ * ZeptoMail credentials: env JAX_ZEPTOMAIL_TOKEN / JAX_ZEPTOMAIL_FROM first,
+ * else zeptomail_token / zeptomail_from keys in the server config file.
+ */
+function zeptoConfig(): ?array
+{
+    $token = (string)(getenv('JAX_ZEPTOMAIL_TOKEN') ?: '');
+    $from = (string)(getenv('JAX_ZEPTOMAIL_FROM') ?: '');
+    if ($token === '' || $from === '') {
+        $cfg = jaxConfigFile();
+        if (is_array($cfg)) {
+            if ($token === '') $token = (string)($cfg['zeptomail_token'] ?? '');
+            if ($from === '') $from = (string)($cfg['zeptomail_from'] ?? '');
+        }
+    }
+    if ($token === '' || $from === '') return null;
+    return ['token' => $token, 'from' => $from];
+}
+
+/**
+ * Send the lead notification through the ZeptoMail HTTPS API.
+ * Returns true only on a 2xx API response. Never throws.
+ */
+function sendViaZeptoMail(string $subject, string $body, string $replyToEmail): bool
+{
+    $cfg = zeptoConfig();
+    if ($cfg === null) {
+        error_log('[jax-lead] ZeptoMail not configured (no token/from)');
+        return false;
+    }
+    $payload = [
+        'from' => ['address' => $cfg['from'], 'name' => 'Jax Tile & LVP'],
+        'to' => [['email_address' => ['address' => 'braga@bragaremodeling.com', 'name' => 'Braga Remodeling']]],
+        'subject' => $subject,
+        'textbody' => $body,
+    ];
+    if ($replyToEmail !== '' && filter_var($replyToEmail, FILTER_VALIDATE_EMAIL)) {
+        $payload['reply_to'] = [['address' => $replyToEmail]];
+    }
+    $ch = curl_init('https://api.zeptomail.com/v1.1/email');
+    if ($ch === false) return false;
+    curl_setopt_array($ch, [
+        CURLOPT_POST => true,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT => 12,
+        CURLOPT_CONNECTTIMEOUT => 4,
+        CURLOPT_HTTPHEADER => [
+            'Authorization: Zoho-enczapikey ' . $cfg['token'],
+            'Content-Type: application/json',
+            'Accept: application/json',
+        ],
+        CURLOPT_POSTFIELDS => json_encode($payload),
+    ]);
+    $res = curl_exec($ch);
+    $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    if ($code >= 200 && $code < 300) return true;
+    error_log('[jax-lead] ZeptoMail send failed HTTP ' . $code . ': ' . substr((string)$res, 0, 200));
+    return false;
+}
 
 /**
  * Create a Lead in Zoho CRM (best-effort, 8s total budget).
