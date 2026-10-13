@@ -13,6 +13,12 @@ RewriteRule ^index\.html$ https://jaxtileandlvp.com/ [R=301,L]
 RewriteRule ^(vinyl-flooring-jacksonville|tile-installation-jacksonville|floor-removal-preparation|service-areas|projects|contact|privacy)\.html$ https://jaxtileandlvp.com/$1/ [R=301,L]
 RewriteRule ^(vinyl-flooring-jacksonville|tile-installation-jacksonville|floor-removal-preparation|service-areas|projects|contact|privacy)/index\.html$ https://jaxtileandlvp.com/$1/ [R=301,L]
 
+# 2b) generic .html alias for every page directory (covers city/guide pages)
+RewriteCond %{DOCUMENT_ROOT}/$1/index.html -f
+RewriteRule ^([a-z0-9-]+)\.html$ https://jaxtileandlvp.com/$1/ [R=301,L]
+RewriteCond %{DOCUMENT_ROOT}/$1/index.html -f
+RewriteRule ^([a-z0-9-]+)/index\.html$ https://jaxtileandlvp.com/$1/ [R=301,L]
+
 # 3) Site is English-only: the old Portuguese page (and language variants) go to the homepage (301)
 RewriteRule ^(portugues|portuguese|pt|pt-br|es|espanol)(/.*|\.html)?$ / [R=301,L]
 
