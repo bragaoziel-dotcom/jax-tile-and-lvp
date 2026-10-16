@@ -36,6 +36,19 @@
   window.gtag("config", GOOGLE_ADS_ID);
   window.gtag("config", GA4_ID);
 
+
+  // Google Ads conversions (Jax Tile & LVP)
+  var LEAD_CONVERSION = "AW-18023260184/sry7CMu4sp8dEJjAlJJD";
+  var CALL_CONVERSION = "AW-18023260184/3zIuCLzrqp8dEJjAlJJD";
+  // Called by site.js ONLY after /api/lead.php confirms a countable lead.
+  window.jaxTrackLeadConversion = function () {
+    window.gtag("event", "conversion", { send_to: LEAD_CONVERSION, value: 1.0, currency: "USD" });
+  };
+  document.addEventListener("click", function (e) {
+    var a = e.target && e.target.closest ? e.target.closest('a[href^="tel:"]') : null;
+    if (a) window.gtag("event", "conversion", { send_to: CALL_CONVERSION });
+  }, true);
+
   var googleTag = document.createElement("script");
   googleTag.async = true;
   googleTag.src = "https://www.googletagmanager.com/gtag/js?id=" + encodeURIComponent(GOOGLE_ADS_ID);
