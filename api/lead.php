@@ -25,6 +25,10 @@ $details = clean('details', 1200);
 $page = clean('page', 180);
 $floor = clean('current_floor', 40);
 $quote = clean('quote_summary', 700);
+$estSummary = mb_substr(trim(strip_tags((string)($_POST['estimate_summary'] ?? ''))), 0, 3000);
+$allowedColors = ['Aspen (Promo)', 'Pecan (Promo)', 'Sandalwood (Promo)', 'Honey Oak', 'Driftwood Gray', 'Silver Ash', 'Weathered Charcoal', 'Golden Chestnut', 'Smoke Taupe', 'Natural Maple', 'Sandy Birch'];
+$color = clean('color', 40);
+if (!in_array($color, $allowedColors, true)) $color = '';
 
 // 3) US phone: 10 digits (optional leading 1), valid NANP area code and exchange.
 $phoneDigits = preg_replace('/\D/', '', clean('phone', 30));
@@ -52,7 +56,7 @@ if (!in_array($service, $allowedServices, true) || ($email !== '' && !filter_var
 if (preg_match('~https?://|www\.|@~i', $name) || preg_match_all('~https?://~i', $details) > 1) respond(['ok' => true, 'trackConversion' => false]);
 
 // 6) Duplicate suppression (10 minutes).
-$fingerprint = hash('sha256', strtolower($phoneDigits . '|' . $zip . '|' . $sqft . '|' . $details));
+$fingerprint = hash('sha256', strtolower($phoneDigits . '|' . $zip . '|' . $sqft . '|' . $details . '|' . $estSummary));
 $cache = sys_get_temp_dir() . '/jax-lead-' . $fingerprint;
 if (is_file($cache) && time() - filemtime($cache) < 600) respond(['ok' => true, 'duplicate' => true, 'trackConversion' => false]);
 
@@ -79,7 +83,9 @@ $estimate = $isTile
     ? 'Tile installation: custom quote after free measure (no published package price)'
     : ($smallTier ? 'SMALL-ROOM FLAT PRICE ' . $tierTxt . ': in-stock LVP, installation, carpet removal & haul-off, cleanup; add-ons extra; tier confirmed at free measure' : ($sqft > 0 ? '$' . number_format($sqft * 3.99, 0) . ' base at $3.99/sq ft (package, 500+ sq ft), before add-ons' : 'n/a'));
 $body = "Name: $name\nPhone: $phonePretty\nEmail: $email\nZIP: $zip\nApprox. sq ft: $sizeTxt\nCurrent floor: " . ($floor ?: 'not given') . "\nBase estimate: $estimate\nService: $service\nPage: $page"
+  . ($color !== '' ? "\nLVP color: $color" : '')
   . ($quote !== '' ? "\n$quote" : '')
+  . ($estSummary !== '' ? "\n\n$estSummary" : '')
   . ($details !== '' ? "\nDetails: $details" : '')
   . "\nSource: jaxtileandlvp.com"
   . ($flags ? "\n\nFlags: " . implode('; ', $flags) : '')
@@ -97,7 +103,19 @@ $headers = "From: Jax Tile & LVP <wordpress@jaxtileandlvp.com>\r\n" . ($email !=
 // HTTPS API (same transport as bragaremodeling.com): authenticated API send
 // from noreply@bragaremodeling.com, DKIM-signed, bypassing hsendmail entirely.
 // mail() with the aligned envelope sender stays as a fallback only.
-$sent = sendViaZeptoMail($subject, $body, $email);
+// Photo estimator uploads (resized to ~1600px JPEG in the browser).
+$photos = collectPhotos();
+if ($photos) {
+    $subject = '[' . count($photos) . ' PHOTOS] ' . $subject;
+    $body .= "\n\nPhotos attached: " . count($photos);
+    $saved = savePhotos($photos, $phoneDigits);
+    if ($saved !== '') $body .= "\nServer copy: " . $saved;
+}
+$sent = sendViaZeptoMail($subject, $body, $email, $photos);
+if (!$sent && $photos) {
+    error_log('[jax-lead] ZeptoMail with attachments failed; retrying without photos');
+    $sent = sendViaZeptoMail($subject, $body . "\n(Photos could not be attached to this email; see server copy above.)", $email);
+}
 if (!$sent) {
     error_log('[jax-lead] ZeptoMail transport failed, falling back to mail() for lead from page ' . $page . ' ZIP ' . $zip);
     $sent = mail('braga@bragaremodeling.com', '=?UTF-8?B?' . base64_encode($subject) . '?=', $body, $headers, '-fwordpress@jaxtileandlvp.com');
@@ -120,7 +138,7 @@ sendToZoho([
     'floor' => $floor,
     'details' => $details,
     'page' => $page,
-    'quote' => $quote,
+    'quote' => trim($quote . ($color !== '' ? ' | Color: ' . $color : '') . ($estSummary !== '' ? "\n" . $estSummary : '')),
     'estimate' => $estimate,
     'tracking' => $tracking,
     'flags' => $flags,
@@ -219,7 +237,7 @@ function zeptoConfig(): ?array
  * Send the lead notification through the ZeptoMail HTTPS API.
  * Returns true only on a 2xx API response. Never throws.
  */
-function sendViaZeptoMail(string $subject, string $body, string $replyToEmail): bool
+function sendViaZeptoMail(string $subject, string $body, string $replyToEmail, array $attachments = []): bool
 {
     $cfg = zeptoConfig();
     if ($cfg === null) {
@@ -232,6 +250,9 @@ function sendViaZeptoMail(string $subject, string $body, string $replyToEmail): 
         'subject' => $subject,
         'textbody' => $body,
     ];
+    if ($attachments) {
+        $payload['attachments'] = array_map(fn($a) => ['content' => base64_encode($a['data']), 'mime_type' => $a['mime'], 'name' => $a['name']], $attachments);
+    }
     if ($replyToEmail !== '' && filter_var($replyToEmail, FILTER_VALIDATE_EMAIL)) {
         $payload['reply_to'] = [['address' => $replyToEmail]];
     }
@@ -376,4 +397,41 @@ function zohoCurl(string $url, array $opts, float $deadline): ?string
     curl_close($ch);
     if ($body === false || $httpCode < 200 || $httpCode >= 300) return null;
     return (string)$body;
+}
+
+/**
+ * Validate uploaded photos[]: real images only, max 12 files, 6 MB each, 14 MB total.
+ * Returns [['name','mime','data'], ...]. Never throws.
+ */
+function collectPhotos(): array
+{
+    $f = $_FILES['photos'] ?? null;
+    if (!is_array($f) || !is_array($f['tmp_name'] ?? null)) return [];
+    $out = []; $total = 0;
+    $finfo = function_exists('finfo_open') ? finfo_open(FILEINFO_MIME_TYPE) : false;
+    foreach ($f['tmp_name'] as $i => $tmp) {
+        if (count($out) >= 12) break;
+        if (($f['error'][$i] ?? 1) !== UPLOAD_ERR_OK || !is_uploaded_file($tmp)) continue;
+        $size = (int)($f['size'][$i] ?? 0);
+        if ($size <= 0 || $size > 6 * 1024 * 1024 || $total + $size > 14 * 1024 * 1024) continue;
+        $mime = $finfo ? (string)finfo_file($finfo, $tmp) : (string)(@getimagesize($tmp)['mime'] ?? '');
+        $ext = ['image/jpeg' => 'jpg', 'image/png' => 'png', 'image/webp' => 'webp', 'image/heic' => 'heic', 'image/heif' => 'heif'][$mime] ?? null;
+        if ($ext === null) continue;
+        $data = (string)file_get_contents($tmp);
+        $base = preg_replace('/[^a-z0-9-]+/', '-', strtolower(pathinfo((string)($f['name'][$i] ?? 'photo'), PATHINFO_FILENAME))) ?: 'photo';
+        $out[] = ['name' => substr($base, 0, 40) . '.' . $ext, 'mime' => $mime, 'data' => $data];
+        $total += $size;
+    }
+    return $out;
+}
+
+/** Best-effort backup copy OUTSIDE the web root (domains/<domain>/lead-photos/). Returns the folder or ''. */
+function savePhotos(array $photos, string $phone): string
+{
+    $docRoot = realpath(__DIR__ . '/..');
+    if ($docRoot === false) return '';
+    $dir = dirname($docRoot) . '/lead-photos/' . date('Y-m-d_His') . '_' . substr($phone, -4) . '_' . bin2hex(random_bytes(3));
+    if (!@mkdir($dir, 0700, true)) return '';
+    foreach ($photos as $i => $p) @file_put_contents($dir . '/' . ($i + 1) . '-' . $p['name'], $p['data']);
+    return str_replace(dirname($docRoot), '~/domains/jaxtileandlvp.com', $dir);
 }

@@ -111,7 +111,7 @@ if(quiz){
 const loadedAt=Date.now();
 const digits=s=>(s||'').replace(/\D/g,'');
 const usPhone=s=>{let d=digits(s);if(d.length===11&&d[0]==='1')d=d.slice(1);return /^[2-9]\d{2}[2-9]\d{6}$/.test(d)?d:'';};
-document.querySelectorAll('form.lead-form').forEach(form=>{
+document.querySelectorAll('form.lead-form:not(.est-form)').forEach(form=>{
   const status=form.querySelector('.form-status');
   const formName=form.dataset.formName||form.id||'lead_form';
   Object.entries(attribution).forEach(([name,value])=>{let input=form.querySelector(`[name="${name}"]`);if(!input){input=document.createElement('input');input.type='hidden';input.name=name;form.appendChild(input)}input.value=value});
@@ -143,3 +143,17 @@ document.querySelectorAll('form.lead-form').forEach(form=>{
     }finally{form.dataset.sending='0';}
   });
 });
+
+// ---------- LVP color selector (homepage, LVP page, estimator) ----------
+const setLvpColor=(name,user)=>{
+  if(!name)return;try{sessionStorage.setItem('jax_color',name)}catch{}
+  document.querySelectorAll('.lvp-swatch').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.color===name)));
+  document.querySelectorAll('.color-picked').forEach(p=>p.textContent='Selected color: '+name+' — added to your quote request.');
+  document.querySelectorAll('form.lead-form').forEach(f=>{let i=f.querySelector('input[name="color"]');if(!i){i=document.createElement('input');i.type='hidden';i.name='color';f.appendChild(i);}i.value=name;});
+  document.querySelectorAll('select[name="color_pick"]').forEach(s=>s.value=name);
+  if(user)dataLayerPush('color_select',{lvp_color:name});
+};
+document.querySelectorAll('.lvp-swatch').forEach(b=>b.addEventListener('click',()=>setLvpColor(b.dataset.color,true)));
+document.querySelectorAll('select[name="color_pick"]').forEach(s=>s.addEventListener('change',()=>setLvpColor(s.value,true)));
+try{const c=sessionStorage.getItem('jax_color');if(c)setLvpColor(c,false);}catch{}
+window.setLvpColor=setLvpColor;
