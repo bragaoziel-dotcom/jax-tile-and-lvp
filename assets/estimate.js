@@ -2,7 +2,7 @@
 (()=>{
 const form=document.getElementById('est-form');if(!form)return;
 const INSTALL=3.99;
-const REMOVAL={none:{label:'No removal (bare floor / we\u2019ll check)',rate:0},carpet:{label:'Carpet & pad removal',rate:0.70},floating:{label:'Floating LVP / laminate removal',rate:0.75},tile:{label:'Tile or glued-down removal (from)',rate:2.00}};
+const REMOVAL={none:{label:'No removal (bare floor / we\u2019ll check)',rate:0},carpet:{label:'Carpet & pad removal',rate:0.50},floating:{label:'Floating LVP / laminate removal',rate:0.75},tile:{label:'Tile or glued-down removal (from)',rate:2.00}};
 const MAX_PHOTOS=12;
 const roomsEl=document.getElementById('rooms'),linesEl=document.getElementById('est-lines'),sumEl=document.getElementById('est-sum');
 const status=form.querySelector('.form-status');
