@@ -1,5 +1,7 @@
 <?php
 declare(strict_types=1);
+// Every lead notification goes to both inboxes (Oziel, 2026-10-17).
+const LEAD_RECIPIENTS = [['braga@bragaremodeling.com', 'Braga Remodeling'], ['bragaoziel@gmail.com', 'Oziel Braga']];
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store');
 header('X-Content-Type-Options: nosniff');
@@ -111,7 +113,7 @@ if (!$sent && $photos) {
 }
 if (!$sent) {
     error_log('[jax-lead] ZeptoMail transport failed, falling back to mail() for lead from page ' . $page . ' ZIP ' . $zip);
-    $sent = mail('braga@bragaremodeling.com', '=?UTF-8?B?' . base64_encode($subject) . '?=', $body, $headers, '-fwordpress@jaxtileandlvp.com');
+    $sent = mail(implode(', ', array_column(LEAD_RECIPIENTS, 0)), '=?UTF-8?B?' . base64_encode($subject) . '?=', $body, $headers, '-fwordpress@jaxtileandlvp.com');
 }
 if (!$sent) {
     error_log('[jax-lead] all notification transports failed for lead from page ' . $page . ' ZIP ' . $zip);
@@ -238,8 +240,10 @@ function sendViaZeptoMail(string $subject, string $body, string $replyToEmail, a
         return false;
     }
     $payload = [
-        'from' => ['address' => $cfg['from'], 'name' => 'Jax Tile & LVP'],
-        'to' => [['email_address' => ['address' => 'braga@bragaremodeling.com', 'name' => 'Braga Remodeling']]],
+        // From name matches the sending domain (bragaremodeling.com); a different brand
+        // name on this domain looked like impersonation and landed in Spam (2026-10-17).
+        'from' => ['address' => $cfg['from'], 'name' => 'Braga Website Leads'],
+        'to' => array_map(fn($a) => ['email_address' => ['address' => $a[0], 'name' => $a[1]]], LEAD_RECIPIENTS),
         'subject' => $subject,
         'textbody' => $body,
     ];
