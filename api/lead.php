@@ -68,20 +68,13 @@ $flags = [];
 if (!$inArea) $flags[] = 'OUTSIDE SERVICE AREA (ZIP not 320xx/322xx)';
 if ($elapsed === null) $flags[] = 'no JS timing (possible bot)';
 $sizeTxt = $sqft > 0 ? $sqft . ' sq ft' : 'sq ft not given';
-$smallJob = $sqft > 0 && $sqft < 500;
-// Small-room flat prices shown on the site (under 500 sq ft).
-$smallTier = null;
-if ($smallJob) {
-  foreach ([[150, 895, 'up to 150 sq ft'], [250, 1195, '151-250 sq ft'], [350, 1495, '251-350 sq ft'], [499, 1895, '351-499 sq ft']] as $t) {
-    if ($sqft <= $t[0]) { $smallTier = $t; break; }
-  }
-}
-$tierTxt = $smallTier ? '$' . number_format($smallTier[1]) . ' tier (' . $smallTier[2] . ')' : '';
+$smallJob = $sqft > 0 && $sqft < 1000;
+// The $3.99 package is for 1,000 sq ft and up; smaller areas are not advertised (custom quote, Oziel decides).
 $isTile = $service === 'Tile Installation';
-$subject = ($inArea ? '' : '[CHECK AREA] ') . ($isTile ? 'New tile installation lead: ' : ($smallTier ? '[SMALL ROOM ' . $tierTxt . '] New LVP small-room lead: ' : 'New LVP $3.99 lead: ')) . $zip . ' · ' . $sizeTxt;
+$subject = ($inArea ? '' : '[CHECK AREA] ') . ($isTile ? 'New tile installation lead: ' : ($smallJob ? '[UNDER 1,000 SQ FT] New LVP lead: ' : 'New LVP $3.99 lead: ')) . $zip . ' · ' . $sizeTxt;
 $estimate = $isTile
     ? 'Tile installation: custom quote after free measure (no published package price)'
-    : ($smallTier ? 'SMALL-ROOM FLAT PRICE ' . $tierTxt . ': in-stock LVP, installation, carpet removal & haul-off, cleanup; add-ons extra; tier confirmed at free measure' : ($sqft > 0 ? '$' . number_format($sqft * 3.99, 0) . ' base at $3.99/sq ft (package, 500+ sq ft), before add-ons' : 'n/a'));
+    : ($smallJob ? 'UNDER 1,000 SQ FT: package price does not apply; no price was shown to the customer (custom quote)' : ($sqft > 0 ? '$' . number_format($sqft * 3.99, 0) . ' base at $3.99/sq ft (package, 1,000+ sq ft), before add-ons' : 'n/a'));
 $body = "Name: $name\nPhone: $phonePretty\nEmail: $email\nZIP: $zip\nApprox. sq ft: $sizeTxt\nCurrent floor: " . ($floor ?: 'not given') . "\nBase estimate: $estimate\nService: $service\nPage: $page"
   . ($color !== '' ? "\nLVP color: $color" : '')
   . ($quote !== '' ? "\n$quote" : '')

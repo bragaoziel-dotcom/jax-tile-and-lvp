@@ -17,7 +17,7 @@ Legacy/cross-business tracking IDs are blocked by CI.
 
 ## Included
 
-- LVP-only sales landing page: Promo $3.99 / Plus $4.49 / Premium from $4.99 per sq ft installed (500 sq ft minimum), 60-second price quiz, add-on price table; English-only (under 500 sq ft = custom quote, no price shown)
+- LVP-only sales landing page: Promo $3.99 / Plus $4.49 / Premium from $4.99 per sq ft installed (1,000 sq ft minimum), 60-second price quiz, add-on price table; English-only (under 1,000 sq ft = custom quote, no price shown; small rooms not advertised)
 - Real Braga Remodeling LVP project imagery stored locally in Jax assets
 - Optimized WebP brand logo for visible page use
 - Call and SMS CTAs using `(904) 520-1994`
