@@ -36,6 +36,46 @@
   window.gtag("config", GOOGLE_ADS_ID);
   window.gtag("config", GA4_ID);
 
+  // Google Ads "Website Calls" (call-tracking number swap). Installed ONCE, here only
+  // (not in GTM, not inline). If Google returns a forwarding number (ad visitors only),
+  // every visible (904) 520-1994 and every tel: link is swapped; otherwise nothing changes.
+  var WEBSITE_CALL_CONVERSION = GOOGLE_ADS_ID + "/8pnMCMrWyoUdEJjAlJJD";
+  var BUSINESS_NUMBER = "(904) 520-1994";
+  var NUMBER_RE = /(\+?1[\s.-]?)?\(?904\)?[\s.-]?520[\s.-]?1994/g;
+  var swapTo = null;
+  function applySwap() {
+    if (!swapTo || !document.body) return;
+    var digits = String(swapTo.mobile || swapTo.formatted || "").replace(/\D/g, "");
+    if (digits.length === 10) digits = "1" + digits;
+    if (digits.length < 11) return;
+    var formatted = swapTo.formatted || ("(" + digits.substr(1, 3) + ") " + digits.substr(4, 3) + "-" + digits.substr(7));
+    document.querySelectorAll('a[href^="tel:"]').forEach(function (a) {
+      if (/9045201994/.test(a.getAttribute("href").replace(/\D/g, ""))) a.setAttribute("href", "tel:+" + digits);
+      var lbl = a.getAttribute("aria-label");
+      if (lbl && NUMBER_RE.test(lbl)) a.setAttribute("aria-label", lbl.replace(NUMBER_RE, formatted));
+      NUMBER_RE.lastIndex = 0;
+    });
+    var walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
+      acceptNode: function (n) {
+        var t = n.parentNode && n.parentNode.nodeName;
+        return (t === "SCRIPT" || t === "STYLE" || t === "NOSCRIPT") ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT;
+      }
+    });
+    var nodes = [], n;
+    while ((n = walker.nextNode())) { if (n.nodeValue.indexOf("520") !== -1) nodes.push(n); }
+    nodes.forEach(function (t) { t.nodeValue = t.nodeValue.replace(NUMBER_RE, formatted); });
+  }
+  window.gtag("config", WEBSITE_CALL_CONVERSION, {
+    phone_conversion_number: BUSINESS_NUMBER,
+    phone_conversion_callback: function (formatted, mobile) {
+      swapTo = { formatted: formatted, mobile: mobile };
+      window.__jaxWebsiteCallNumber = swapTo;
+      if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", applySwap);
+      else applySwap();
+      try { window.dispatchEvent(new Event("jax:website-call-number")); } catch (e) {}
+    }
+  });
+
 
   // Google Ads conversions (Jax Tile & LVP)
   var LEAD_CONVERSION = "AW-18023260184/sry7CMu4sp8dEJjAlJJD";
