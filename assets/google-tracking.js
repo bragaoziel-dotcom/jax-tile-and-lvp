@@ -44,6 +44,16 @@
   window.jaxTrackLeadConversion = function () {
     window.gtag("event", "conversion", { send_to: LEAD_CONVERSION, value: 1.0, currency: "USD" });
   };
+  // Second, separate conversion: "JTL - Pre-qualified lead (1,000+ sq ft, in area)".
+  // Decided server-side by /api/lead.php (in area, not tile, 1,000+ sq ft). Fires at most
+  // once per Lead ID (transaction_id = Lead ID; also de-duplicated in the page).
+  var QUALIFIED_LEAD_CONVERSION = "AW-18023260184/0V9jCPvRg6AdEJjAlJJD";
+  var qualifiedSent = {};
+  window.jaxTrackQualifiedLead = function (leadId) {
+    if (!QUALIFIED_LEAD_CONVERSION || !leadId || qualifiedSent[leadId]) return;
+    qualifiedSent[leadId] = true;
+    window.gtag("event", "conversion", { send_to: QUALIFIED_LEAD_CONVERSION, value: 1.0, currency: "USD", transaction_id: leadId || "" });
+  };
   document.addEventListener("click", function (e) {
     var a = e.target && e.target.closest ? e.target.closest('a[href^="tel:"]') : null;
     if (a) window.gtag("event", "conversion", { send_to: CALL_CONVERSION });

@@ -86,7 +86,7 @@ form.addEventListener('submit',async e=>{
     const result=await response.json();
     if(!response.ok||!result.ok)throw new Error(result.message||'Unable to send');
     setStatus('Thank you! We got your rooms and photos. Oziel will text you your written quote shortly.','success');
-    if(result.trackConversion){if(typeof window.jaxTrackLeadConversion==='function')window.jaxTrackLeadConversion();push('generate_lead',{service:'LVP Installed',form_name:'photo-estimator',source_page:document.title,lead_source:'photo_estimator'});}
+    if(result.trackConversion){if(typeof window.jaxTrackLeadConversion==='function')window.jaxTrackLeadConversion();push('generate_lead',{service:'LVP Installed',form_name:'photo-estimator',source_page:document.title,lead_source:'photo_estimator'});if(result.qualified){if(typeof window.jaxTrackQualifiedLead==='function')window.jaxTrackQualifiedLead(result.leadId);push('qualified_lead',{service:'LVP Installed',form_name:'photo-estimator'});}}
   }catch(err){setStatus(err.message&&err.message!=='Unable to send'?err.message:'We could not send the request. Please call or text (904) 520-1994.','error');push('lead_form_error',{form_name:'photo-estimator'});}
   finally{form.dataset.sending='0';}
 });

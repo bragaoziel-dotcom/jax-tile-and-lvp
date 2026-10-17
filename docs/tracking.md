@@ -70,3 +70,9 @@ These must not be installed in Jax runtime code:
 - Meta Pixel `1432051588726720`
 
 The historical `GTM-MF6BLDTV` container was documented in the Braga Remodeling repository as contaminated/cross-business and is not the Braga production container.
+
+## Qualified lead conversion ("JTL - Pre-qualified lead (1,000+ sq ft, in area)")
+- `/api/lead.php` decides server-side: `qualified = in service area (320xx/322xx, minus 32011/32046/32068) AND not tile AND sq ft >= 1000`.
+- The response is `{ok, trackConversion, qualified, leadId}`. "Form submitted" (sry7…) still fires exactly as before. When `qualified` is true, `window.jaxTrackQualifiedLead(leadId)` also fires a second Google Ads conversion (with `transaction_id = leadId`) and the dataLayer event `qualified_lead`.
+- Label: `QUALIFIED_LEAD_CONVERSION = AW-18023260184/0V9jCPvRg6AdEJjAlJJD`; fires at most once per Lead ID.
+- The lead ID and "Pre-qualified (online rule: 1,000+ sq ft, in area, not tile): YES/NO" and "Material+install confirmed: PENDING" go into the e-mail and Zoho, for offline import.

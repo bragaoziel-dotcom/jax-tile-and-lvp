@@ -42,6 +42,13 @@ $zipRaw = clean('zip', 10);
 $zip = preg_match('/^(\d{5})(-\d{4})?$/', $zipRaw, $zm) ? $zm[1] : '';
 $inArea = $zip !== '' && (bool)preg_match('/^32[02]\d{2}$/', $zip);
 
+// Qualified-lead rule (online signal for Google Ads, 2026-10-17): LVP lead, in the
+// service area, 1,000+ sq ft (the $3.99 package minimum). ZIPs the campaign excludes
+// (Callahan, Hilliard, Middleburg) never count. Leads without sq ft are NOT counted
+// online; they can still be imported later as offline "qualified" conversions.
+const QUALIFIED_MIN_SQFT = 1000;
+const QUALIFIED_EXCLUDED_ZIPS = ['32011', '32046', '32068'];
+
 $sqftRaw = preg_replace('/[^\d]/', '', clean('sqft', 8));
 $sqft = $sqftRaw === '' ? 0 : min((int)$sqftRaw, 50000);
 
@@ -73,6 +80,8 @@ $sizeTxt = $sqft > 0 ? $sqft . ' sq ft' : 'sq ft not given';
 $smallJob = $sqft > 0 && $sqft < 1000;
 // The $3.99 package is for 1,000 sq ft and up; smaller areas are not advertised (custom quote, Oziel decides).
 $isTile = $service === 'Tile Installation';
+$qualified = $inArea && !$isTile && $sqft >= QUALIFIED_MIN_SQFT && !in_array($zip, QUALIFIED_EXCLUDED_ZIPS, true);
+$leadId = 'JTL-' . date('Ymd') . '-' . substr($fingerprint, 0, 8);
 $subject = ($inArea ? '' : '[CHECK AREA] ') . ($isTile ? 'New tile installation lead: ' : ($smallJob ? '[UNDER 1,000 SQ FT] New LVP lead: ' : 'New LVP $3.99 lead: ')) . $zip . ' · ' . $sizeTxt;
 $estimate = $isTile
     ? 'Tile installation: custom quote after free measure (no published package price)'
@@ -83,6 +92,9 @@ $body = "Name: $name\nPhone: $phonePretty\nEmail: $email\nZIP: $zip\nApprox. sq 
   . ($estSummary !== '' ? "\n\n$estSummary" : '')
   . ($details !== '' ? "\nDetails: $details" : '')
   . "\nSource: jaxtileandlvp.com"
+  . "\nLead ID: $leadId"
+  . "\nPre-qualified (online rule: 1,000+ sq ft, in area, not tile): " . ($qualified ? 'YES' : 'NO')
+  . "\nMaterial+install confirmed: PENDING (confirm with client)"
   . ($flags ? "\n\nFlags: " . implode('; ', $flags) : '')
   . ($tracking ? "\n\nAttribution:\n" . implode("\n", $tracking) : '');
 $headers = "From: Jax Tile & LVP <wordpress@jaxtileandlvp.com>\r\n" . ($email !== '' ? 'Reply-To: ' . $email . "\r\n" : '') . "Content-Type: text/plain; charset=UTF-8\r\n";
@@ -137,10 +149,13 @@ sendToZoho([
     'estimate' => $estimate,
     'tracking' => $tracking,
     'flags' => $flags,
+    'lead_id' => $leadId,
+    'qualified' => $qualified,
 ]);
 
 // Only real, in-area leads with JS timing count as a Google Ads / GA4 / Meta conversion.
-respond(['ok' => true, 'trackConversion' => $inArea && $elapsed !== null]);
+$countable = $inArea && $elapsed !== null;
+respond(['ok' => true, 'trackConversion' => $countable, 'qualified' => $countable && $qualified, 'leadId' => $leadId]);
 
 /**
  * Server config file shared by the Zoho CRM and ZeptoMail transports.
@@ -352,6 +367,7 @@ function sendToZoho(array $lead): void
         'Lead Source: jaxtileandlvp.com',
         !empty($lead['tracking']) ? 'Attribution: ' . implode('; ', $lead['tracking']) : null,
         !empty($lead['flags']) ? 'Flags: ' . implode('; ', $lead['flags']) : null,
+        !empty($lead['lead_id']) ? 'Lead ID: ' . $lead['lead_id'] . ' | Pre-qualified (online rule: 1,000+ sq ft, in area, not tile): ' . (!empty($lead['qualified']) ? 'YES' : 'NO') . ' | Material+install confirmed: PENDING (confirm with client)' : null,
         'Captured at: ' . gmdate('c'),
     ]));
 

@@ -134,6 +134,7 @@ document.querySelectorAll('form.lead-form:not(.est-form)').forEach(form=>{
       if(!response.ok||!result.ok){const err=new Error(result.message||'Unable to send');err.field=result.field;throw err;}
       setStatus(copy.success,'success');
       if(result.trackConversion&&typeof window.jaxTrackLeadConversion==='function')window.jaxTrackLeadConversion();
+      if(result.trackConversion&&result.qualified){if(typeof window.jaxTrackQualifiedLead==='function')window.jaxTrackQualifiedLead(result.leadId);dataLayerPush('qualified_lead',{service:'LVP Installed',form_name:formName});}
       if(result.trackConversion)dataLayerPush('generate_lead',{service:'LVP Installed',form_name:formName,source_page:document.title,lead_source:form.id==='calc-lead-form'?'price_quiz':'website_form'});
       form.reset();
     }catch(err){
