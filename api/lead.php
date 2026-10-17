@@ -93,7 +93,8 @@ $body = "Name: $name\nPhone: $phonePretty\nEmail: $email\nZIP: $zip\nApprox. sq 
   . ($details !== '' ? "\nDetails: $details" : '')
   . "\nSource: jaxtileandlvp.com"
   . "\nLead ID: $leadId"
-  . "\nQualified (online rule: in area + 1,000+ sq ft): " . ($qualified ? 'YES' : 'NO')
+  . "\nPre-qualified (online rule: 1,000+ sq ft, in area, not tile): " . ($qualified ? 'YES' : 'NO')
+  . "\nMaterial+install confirmed: PENDING (confirm with client)"
   . ($flags ? "\n\nFlags: " . implode('; ', $flags) : '')
   . ($tracking ? "\n\nAttribution:\n" . implode("\n", $tracking) : '');
 $headers = "From: Jax Tile & LVP <wordpress@jaxtileandlvp.com>\r\n" . ($email !== '' ? 'Reply-To: ' . $email . "\r\n" : '') . "Content-Type: text/plain; charset=UTF-8\r\n";
@@ -366,7 +367,7 @@ function sendToZoho(array $lead): void
         'Lead Source: jaxtileandlvp.com',
         !empty($lead['tracking']) ? 'Attribution: ' . implode('; ', $lead['tracking']) : null,
         !empty($lead['flags']) ? 'Flags: ' . implode('; ', $lead['flags']) : null,
-        !empty($lead['lead_id']) ? 'Lead ID: ' . $lead['lead_id'] . ' | Qualified (online rule): ' . (!empty($lead['qualified']) ? 'YES' : 'NO') : null,
+        !empty($lead['lead_id']) ? 'Lead ID: ' . $lead['lead_id'] . ' | Pre-qualified (online rule: 1,000+ sq ft, in area, not tile): ' . (!empty($lead['qualified']) ? 'YES' : 'NO') . ' | Material+install confirmed: PENDING (confirm with client)' : null,
         'Captured at: ' . gmdate('c'),
     ]));
 
