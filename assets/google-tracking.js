@@ -44,6 +44,14 @@
   window.jaxTrackLeadConversion = function () {
     window.gtag("event", "conversion", { send_to: LEAD_CONVERSION, value: 1.0, currency: "USD" });
   };
+  // Second, separate conversion: QUALIFIED lead (in service area + 1,000+ sq ft, decided
+  // server-side by /api/lead.php). Create the action in Google Ads first, then paste its
+  // label here ("AW-18023260184/XXXXXXXX"). While empty, nothing is sent.
+  var QUALIFIED_LEAD_CONVERSION = ""; // TODO: AW-18023260184/<qualified-lead label>
+  window.jaxTrackQualifiedLead = function (leadId) {
+    if (!QUALIFIED_LEAD_CONVERSION) return;
+    window.gtag("event", "conversion", { send_to: QUALIFIED_LEAD_CONVERSION, value: 1.0, currency: "USD", transaction_id: leadId || "" });
+  };
   document.addEventListener("click", function (e) {
     var a = e.target && e.target.closest ? e.target.closest('a[href^="tel:"]') : null;
     if (a) window.gtag("event", "conversion", { send_to: CALL_CONVERSION });
