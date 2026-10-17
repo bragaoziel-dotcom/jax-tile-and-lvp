@@ -39,20 +39,20 @@ if(INSTAGRAM_URL){document.querySelectorAll('.js-instagram').forEach(link=>{link
 document.querySelectorAll('.js-instagram').forEach(link=>link.addEventListener('click',()=>dataLayerPush('social_click',{social_network:'instagram',cta_location:ctaLocation(link)})));
 
 // ---------- 60-second price quiz ----------
-const PRICING={promo:3.99,plus:4.49,premium:4.99,minSqft:500,shoeLF:2.99,lfPerSqftLow:.30,lfPerSqftHigh:.45,roomSqft:170,measureSlack:.10,smallTiers:[[150,895,'up to 150 sq ft'],[250,1195,'151–250 sq ft'],[350,1495,'251–350 sq ft'],[499,1895,'351–499 sq ft']],removal:{carpet:[.50,.50],tile:[2.00,2.00],glued:[2.00,2.00],floating:[.75,.75],concrete:[0,0]},dumpster:400,stairs:{'0':[0,0],few:[1,5],one:[12,14],two:[24,28]},stairLow:85,stairHigh:110};
+const PRICING={promo:3.99,plus:4.49,premium:4.99,minSqft:1000,shoeLF:2.99,lfPerSqftLow:.30,lfPerSqftHigh:.45,roomSqft:170,measureSlack:.10,smallTiers:[[999,0,'under 1,000 sq ft']],removal:{carpet:[.50,.50],tile:[2.00,2.00],glued:[2.00,2.00],floating:[.75,.75],concrete:[0,0]},dumpster:400,stairs:{'0':[0,0],few:[1,5],one:[12,14],two:[24,28]},stairLow:85,stairHigh:110};
 const money=n=>'$'+Math.round(n).toLocaleString('en-US');
 const smallTier=s=>{const r=Math.round(s);return r<PRICING.minSqft?PRICING.smallTiers.find(t=>r<=t[0])||null:null;};
 const quiz=document.querySelector('#lvp-quiz');
 let calcSummary='';
 if(quiz){
-  const T={size:'~{s} sq ft',min:' (under 500 sq ft: small-room flat price)',from:'from ',base:'Floor + installation',rem:'Removal of current floor',stairs:'Stairs',shoe:'Shoe molding (Promo/Premium)',shoeUnsure:'Shoe molding, if wanted (Promo/Premium)'};
+  const T={size:'~{s} sq ft',min:' (under 1,000 sq ft: packages do not apply)',from:'from ',base:'Floor + installation',rem:'Removal of current floor',stairs:'Stairs',shoe:'Shoe molding (Promo/Premium)',shoeUnsure:'Shoe molding, if wanted (Promo/Premium)'};
   const steps=[...quiz.querySelectorAll('.q-step')],result=quiz.querySelector('.q-result'),next=quiz.querySelector('.q-next'),back=quiz.querySelector('.q-back'),nav=quiz.querySelector('.q-nav'),bar=quiz.querySelector('.quiz-progress span'),now=quiz.querySelector('.q-now'),top=quiz.querySelector('.quiz-top');
   let step=1,started=false;
   const val=name=>quiz.querySelector(`input[name="${name}"]:checked`)?.value||'';
   const sqftOf=()=>{const typed=parseFloat(quiz.querySelector('#q-sqft')?.value);if(Number.isFinite(typed)&&typed>0)return typed;const r=parseFloat(val('q_rooms'));return r?r*PRICING.roomSqft:0;};
   const answered=n=>n===1?sqftOf()>0:n===2?!!val('q_floor'):n===3?!!val('q_stairs'):n===4?!!val('q_shoe'):true;
   const show=n=>{step=n;steps.forEach(s=>s.hidden=Number(s.dataset.step)!==n);const done=n>steps.length;result.hidden=!done;nav.hidden=done;top.hidden=done;back.hidden=n===1;if(!done){now.textContent=n;bar.style.width=(n/steps.length*100)+'%';next.disabled=!answered(n);}if(done)compute();quiz.dataset.step=String(n);};
-  const go=n=>{show(n);dataLayerPush(n>steps.length?'quiz_complete':'quiz_step',n>steps.length?{cta_location:'quiz',sqft_bucket:bucket(sqftOf()),current_floor:val('q_floor'),stairs:val('q_stairs'),shoe_molding:val('q_shoe')}:{cta_location:'quiz',quiz_step:n});if(n>steps.length)dataLayerPush('calculator_estimate',{cta_location:'quiz',sqft_bucket:bucket(sqftOf()),quote_type:smallTier(sqftOf())?'small_flat':'package'});quiz.scrollIntoView({behavior:'smooth',block:'start'});};
+  const go=n=>{show(n);dataLayerPush(n>steps.length?'quiz_complete':'quiz_step',n>steps.length?{cta_location:'quiz',sqft_bucket:bucket(sqftOf()),current_floor:val('q_floor'),stairs:val('q_stairs'),shoe_molding:val('q_shoe')}:{cta_location:'quiz',quiz_step:n});if(n>steps.length)dataLayerPush('calculator_estimate',{cta_location:'quiz',sqft_bucket:bucket(sqftOf()),quote_type:smallTier(sqftOf())?'under_min':'package'});quiz.scrollIntoView({behavior:'smooth',block:'start'});};
   const bucket=s=>s<500?'<500':s<1000?'500-999':s<1500?'1000-1499':s<2500?'1500-2499':'2500+';
   function compute(){
     const sqft=sqftOf(),hi=sqft*(1+PRICING.measureSlack),bL=Math.max(sqft,PRICING.minSqft),bH=Math.max(hi,PRICING.minSqft);
@@ -66,22 +66,21 @@ if(quiz){
     const premium=bL*PRICING.premium+remL+stL+shL+dump;
     quiz.querySelector('.q-size').textContent=T.size.replace('{s}',Math.round(sqft).toLocaleString('en-US'))+(smallTier(sqft)?T.min:'');
     const tier=smallTier(sqft),small=!!tier;
-    quiz.dataset.quote=small?'small_flat':'package';
+    quiz.dataset.quote=small?'under_min':'package';
     quiz.querySelector('.q-small')?.toggleAttribute('hidden',!small);
     quiz.querySelector('.q-packages')?.toggleAttribute('hidden',small);
     const formHead=document.querySelector('#calc-lead-form .form-heading'),formBtn=document.querySelector('#calc-lead-form button[type=submit]');
-    if(formHead){formHead.dataset.def=formHead.dataset.def||formHead.textContent;formHead.textContent=small?'Want this flat price? Leave your number and we’ll text you to book the free measure.':formHead.dataset.def;}
-    if(formBtn){formBtn.dataset.def=formBtn.dataset.def||formBtn.textContent;formBtn.textContent=small?'Text Me My Flat Price':formBtn.dataset.def;}
+    if(formHead){formHead.dataset.def=formHead.dataset.def||formHead.textContent;formHead.textContent=small?'Under 1,000 sq ft? Leave your number and we’ll text you about your project.':formHead.dataset.def;}
+    if(formBtn){formBtn.dataset.def=formBtn.dataset.def||formBtn.textContent;formBtn.textContent=small?'Text Me About My Project':formBtn.dataset.def;}
     if(small){
-      const flat=tier[1],xL=remL+stL+shL+dump,xH=remH+stH+shH+dump;
-      quiz.querySelector('.q-flat').textContent=money(flat);
-      quiz.querySelector('.q-tier').textContent='Flat price for '+tier[2]+(xH?' · plus the add-ons below':'');
+      const xL=remL+stL+shL+dump,xH=remH+stH+shH+dump;
+      quiz.querySelector('.q-flat').textContent='Custom quote';
+      quiz.querySelector('.q-tier').textContent='The $3.99 package and the Plus and Premium prices are for 1,000 sq ft and up.';
       const list=quiz.querySelector('#calc-breakdown');list.replaceChildren();
-      const lines=[['Small-room flat price ('+tier[2]+')',flat,flat]];
+      const lines=[];
       if(remH)lines.push([T.rem,remL,remH]);if(dump)lines.push(['Dumpster (haul-away)',dump,dump]);if(stH)lines.push([T.stairs+` (${sL}–${sH})`,stL,stH]);if(shH)lines.push([(shoe==='yes'?'Shoe molding':'Shoe molding, if wanted')+` (~${lfL}–${lfH} LF)`,shL,shH]);
-      if(xH)lines.push(['Estimated total',flat+xL,flat+xH]);
       lines.forEach(([label,a,b])=>{const li=document.createElement('li');const sp=document.createElement('span');sp.textContent=label;const v=document.createElement('b');v.textContent=range(a,b);li.append(sp,v);list.appendChild(li);});
-      calcSummary=`Quiz: ~${Math.round(sqft)} sq ft; SMALL-ROOM FLAT PRICE ${money(flat)} (${tier[2]} tier)`+(xH?`; add-ons ${range(xL,xH)}; est. total ${range(flat+xL,flat+xH)}`:'')+`; floor ${val('q_floor')}; stairs ${val('q_stairs')}; shoe ${shoe}`;
+      calcSummary=`Quiz: ~${Math.round(sqft)} sq ft; UNDER 1,000 SQ FT (no package price shown)`+(xH?`; add-ons ${range(xL,xH)}`:'')+`; floor ${val('q_floor')}; stairs ${val('q_stairs')}; shoe ${shoe}`;
       const form=document.querySelector('#calc-lead-form');if(form){const s=form.querySelector('[name="sqft"]');if(s)s.value=Math.round(sqft);const map={carpet:'Carpet',tile:'Tile',glued:'Wood / laminate',floating:'Wood / laminate',concrete:'Bare concrete slab'};const cf=form.querySelector('[name="current_floor"]');if(cf&&map[val('q_floor')])cf.value=map[val('q_floor')];}
       return;}
     quiz.querySelector('.q-promo').textContent=range(...promo);

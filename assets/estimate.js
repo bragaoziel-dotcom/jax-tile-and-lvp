@@ -1,7 +1,7 @@
 // Photo estimator: rooms + photos + live price. Submits through /api/lead.php (same pipeline as the other forms).
 (()=>{
 const form=document.getElementById('est-form');if(!form)return;
-const INSTALL=3.99;
+const INSTALL=3.99;const MIN_SQFT=1000;
 const REMOVAL={none:{label:'No removal (bare floor / we\u2019ll check)',rate:0},carpet:{label:'Carpet & pad removal',rate:0.50},floating:{label:'Floating LVP / laminate removal',rate:0.75},tile:{label:'Tile or glued-down removal (from)',rate:2.00}};
 const MAX_PHOTOS=12;
 const roomsEl=document.getElementById('rooms'),linesEl=document.getElementById('est-lines'),sumEl=document.getElementById('est-sum');
@@ -12,16 +12,16 @@ const rate=n=>'$'+n.toFixed(2);
 const photos=new Map(); // roomId -> [{blob,url}]
 const push=(e,p)=>{try{dataLayerPush(e,p)}catch{}};
 
-function addRoom(){
-  const id=++seq;photos.set(id,[]);
-  const el=document.createElement('div');el.className='room';el.dataset.id=id;
-  el.innerHTML=`<div class="room-head"><input name="room_name" value="Room ${id}" maxlength="40" aria-label="Room name"><button type="button" class="room-remove">Remove</button></div>
+const roomTpl=id=>`<div class="room-head"><input name="room_name" value="Room ${id}" maxlength="40" aria-label="Room name"><button type="button" class="room-remove">Remove</button></div>
 <label class="photo-btn">📷 Take or add photos<input type="file" accept="image/*" capture="environment" multiple></label><div class="thumbs"></div>
 <div class="dims"><label>Length (ft)<input class="len" type="number" inputmode="decimal" min="0" max="200" step="0.5" placeholder="12"></label><span class="x">×</span><label>Width (ft)<input class="wid" type="number" inputmode="decimal" min="0" max="200" step="0.5" placeholder="14"></label></div>
 <p class="or">— or —</p><label>Total sq ft for this room<input class="sq" type="number" inputmode="numeric" min="0" max="20000" step="1" placeholder="e.g. 250"></label>
 <div class="opts" role="radiogroup" aria-label="Current floor removal">${Object.entries(REMOVAL).map(([k,v])=>`<label><input type="radio" name="rem${id}" value="${k}" ${k==='none'?'checked':''}> ${v.label}${v.rate?` · ${rate(v.rate)}/sq ft`:''}</label>`).join('')}</div>
 <p class="room-sub">0 sq ft</p>`;
-  roomsEl.appendChild(el);
+// The first room is pre-rendered in the HTML (no layout shift); JS only wires it up.
+function addRoom(existing){
+  const id=++seq;photos.set(id,[]);
+  let el=existing;if(!el){el=document.createElement('div');el.className='room';el.dataset.id=id;el.innerHTML=roomTpl(id);roomsEl.appendChild(el);}
   el.querySelector('.room-remove').onclick=()=>{if(roomsEl.children.length<=1)return;photos.get(id).forEach(p=>URL.revokeObjectURL(p.url));photos.delete(id);el.remove();calc();};
   el.querySelectorAll('input').forEach(i=>i.addEventListener('input',calc));
   el.querySelector('.len').addEventListener('input',()=>el.querySelector('.sq').value='');
@@ -48,18 +48,19 @@ function rooms(){return [...roomsEl.children].map((el,i)=>{
   return {id:+el.dataset.id,el,name:(el.querySelector('[name=room_name]').value||`Room ${i+1}`).trim(),len,wid,sq,rem,dims:sqIn>0?`${sq} sq ft`:(len&&wid?`${len} x ${wid} ft = ${sq} sq ft`:'size not given')};
 });}
 function totals(){const rs=rooms();const sq=rs.reduce((a,r)=>a+r.sq,0);const rem={};rs.forEach(r=>{if(r.rem!=='none'&&r.sq)rem[r.rem]=(rem[r.rem]||0)+r.sq;});
-  // Under 500 sq ft the site's small-room flat prices apply (they include carpet removal & haul-off).
-  const tier=sq>0&&sq<500?[[150,895,'up to 150 sq ft'],[250,1195,'151-250 sq ft'],[350,1495,'251-350 sq ft'],[499,1895,'351-499 sq ft']].find(t=>sq<=t[0]):null;
-  const lines=tier?[[`Small-room flat price (${tier[2]}, carpet removal included)`,tier[1]]]:[[`Install ${sq.toLocaleString('en-US')} sq ft × ${rate(INSTALL)}`,sq*INSTALL]];
-  Object.entries(rem).forEach(([k,s])=>{if(tier&&k==='carpet')return;lines.push([`${REMOVAL[k].label} ${s.toLocaleString('en-US')} sq ft × ${rate(REMOVAL[k].rate)}`,s*REMOVAL[k].rate]);});
-  return {rs,sq,lines,total:lines.reduce((a,l)=>a+l[1],0)};}
+  // The $3.99 package is for 1,000 sq ft and up; smaller areas get a custom quote (no published price).
+  const under=sq>0&&sq<MIN_SQFT;
+  if(under)return {rs,sq,under,lines:[[`${sq.toLocaleString('en-US')} sq ft: under the 1,000 sq ft package minimum`,null]],total:0};
+  const lines=[[`Install ${sq.toLocaleString('en-US')} sq ft × ${rate(INSTALL)}`,sq*INSTALL]];
+  Object.entries(rem).forEach(([k,s])=>{lines.push([`${REMOVAL[k].label} ${s.toLocaleString('en-US')} sq ft × ${rate(REMOVAL[k].rate)}`,s*REMOVAL[k].rate]);});
+  return {rs,sq,under,lines,total:lines.reduce((a,l)=>a+l[1],0)};}
 function calc(){const t=totals();t.rs.forEach(r=>r.el.querySelector('.room-sub').textContent=`${r.sq.toLocaleString('en-US')} sq ft`);
-  linesEl.replaceChildren(...t.lines.map(([l,v])=>{const li=document.createElement('li');li.innerHTML=`<span></span><span>${money(v)}</span>`;li.firstChild.textContent=l;return li;}));
-  sumEl.textContent=money(t.total);
+  linesEl.replaceChildren(...t.lines.map(([l,v])=>{const li=document.createElement('li');li.innerHTML=`<span></span><span>${v===null?'Custom quote':money(v)}</span>`;li.firstChild.textContent=l;return li;}));
+  sumEl.textContent=t.under?'Custom quote':money(t.total);
 }
 function setStatus(m,c){status.textContent=m;status.className='form-status '+(c||'');}
 document.getElementById('add-room').onclick=()=>{addRoom();push('estimate_room_add',{room_count:roomsEl.children.length});};
-addRoom();
+addRoom(roomsEl.querySelector('.room[data-id="1"]')||undefined);
 
 const usPhone=v=>{let d=v.replace(/\D/g,'');if(d.length===11&&d[0]==='1')d=d.slice(1);return /^[2-9]\d{2}[2-9]\d{6}$/.test(d);};
 form.addEventListener('submit',async e=>{
@@ -70,7 +71,7 @@ form.addEventListener('submit',async e=>{
   if(!/^\d{5}$/.test(f.zip.value.trim())){setStatus('Please enter a 5-digit ZIP code.','error');f.zip.focus();return;}
   if(!t.sq&&!totalPhotos()){setStatus('Add a room size or at least one photo.','error');return;}
   const color=f.color_pick.value||'';
-  const summary=['PHOTO ESTIMATOR',...t.rs.map(r=>`- ${r.name}: ${r.dims}; removal: ${r.rem==='none'?'none':REMOVAL[r.rem].label+' '+rate(REMOVAL[r.rem].rate)+'/sq ft'}; photos: ${photos.get(r.id).length}`),...t.lines.map(([l,v])=>`${l} = ${money(v)}`),`ESTIMATED TOTAL: ${money(t.total)} (shown to customer; leveling/molding/stairs/dumpster quoted separately)`,`Color: ${color||'not chosen'}`].join('\n');
+  const summary=['PHOTO ESTIMATOR',...t.rs.map(r=>`- ${r.name}: ${r.dims}; removal: ${r.rem==='none'?'none':REMOVAL[r.rem].label+' '+rate(REMOVAL[r.rem].rate)+'/sq ft'}; photos: ${photos.get(r.id).length}`),...t.lines.map(([l,v])=>`${l} = ${v===null?'custom quote':money(v)}`),t.under?`UNDER 1,000 SQ FT: no package price shown to customer (custom quote)`:`ESTIMATED TOTAL: ${money(t.total)} (shown to customer; leveling/molding/stairs/dumpster quoted separately)`,`Color: ${color||'not chosen'}`].join('\n');
   const fd=new FormData();
   [['name',f.name.value],['phone',f.phone.value],['zip',f.zip.value.trim()],['email',f.email.value],['website',f.website.value]].forEach(([k,v])=>fd.append(k,v));
   fd.append('service','LVP Installed');fd.append('page','Photo estimator');fd.append('sqft',String(t.sq));
