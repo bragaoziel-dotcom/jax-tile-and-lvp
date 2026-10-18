@@ -86,11 +86,15 @@ if(quiz){
     quiz.querySelector('.q-promo').textContent=range(...promo);
     quiz.querySelector('.q-plus').textContent=range(...plus);
     quiz.querySelector('.q-premium').textContent=T.from+money(premium);
+    const saveEl=quiz.querySelector('.q-plus-save');let saveNote='';
+    if(saveEl){saveEl.hidden=true;
+      if(shoe==='yes'){const svL=promo[0]-plus[0],svH=promo[1]-plus[1];if(svL>0){saveEl.textContent=`Bundle deal: you save ${range(svL,svH)} vs. Promo with shoe molding added`;saveEl.hidden=false;saveNote=`; Plus bundle saves ${range(svL,svH)}`;}}
+      else if(shoe==='unsure'){const svH=promo[1]-plus[1];if(svH>0){saveEl.textContent=`With shoe molding, Plus saves you up to ${money(svH)} vs. Promo`;saveEl.hidden=false;saveNote=`; Plus saves up to ${money(svH)} with shoe`;}}}
     const list=quiz.querySelector('#calc-breakdown');list.replaceChildren();
     const lines=[[T.base+' (Promo)',bL*PRICING.promo,bH*PRICING.promo]];
     if(remH)lines.push([T.rem,remL,remH]);if(dump)lines.push(['Dumpster (haul-away)',dump,dump]);if(stH)lines.push([T.stairs+` (${sL}–${sH})`,stL,stH]);if(shH)lines.push([(shoe==='yes'?T.shoe:T.shoeUnsure)+` (~${lfL}–${lfH} LF)`,shL,shH]);
     lines.forEach(([label,a,b])=>{const li=document.createElement('li');const s=document.createElement('span');s.textContent=label;const v=document.createElement('b');v.textContent=range(a,b);li.append(s,v);list.appendChild(li);});
-    calcSummary=`Quiz: ~${Math.round(sqft)} sq ft; floor ${val('q_floor')}; stairs ${val('q_stairs')}; shoe ${shoe}; Promo ${range(...promo)}; Plus ${range(...plus)}; Premium from ${money(premium)}`;
+    calcSummary=`Quiz: ~${Math.round(sqft)} sq ft; floor ${val('q_floor')}; stairs ${val('q_stairs')}; shoe ${shoe}; Promo ${range(...promo)}; Plus ${range(...plus)}; Premium from ${money(premium)}`+saveNote;
     const form=document.querySelector('#calc-lead-form');
     if(form){const s=form.querySelector('[name="sqft"]');if(s)s.value=Math.round(sqft);const map={carpet:'Carpet',tile:'Tile',glued:'Wood / laminate',floating:'Wood / laminate',concrete:'Bare concrete slab'};const cf=form.querySelector('[name="current_floor"]');if(cf&&map[val('q_floor')])cf.value=map[val('q_floor')];}
   }
