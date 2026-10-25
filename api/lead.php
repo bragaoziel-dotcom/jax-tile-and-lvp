@@ -106,10 +106,14 @@ $headers = "From: Jax Tile & LVP <wordpress@jaxtileandlvp.com>\r\n" . ($email !=
 // real subject and/or the real body — never arrives, even though mail()
 // returns true (in web AND CLI contexts, with or without an aligned -f
 // envelope sender; SPF/DMARC alignment was NOT the cause). Deliveries stopped
-// after 2026-10-11 12:37 EDT. Primary transport is therefore the ZeptoMail
-// HTTPS API (same transport as bragaremodeling.com): authenticated API send
-// from noreply@bragaremodeling.com, DKIM-signed, bypassing hsendmail entirely.
-// mail() with the aligned envelope sender stays as a fallback only.
+// after 2026-10-11 12:37 EDT, so the primary transport became the ZeptoMail
+// HTTPS API. On 2026-10-25 bragaremodeling.com migrated to the Gmail API
+// (Oziel: "usa o Google para fazer tudo") and the ZeptoMail credentials were
+// removed from the shared app env — which silently broke this site's mail
+// too (lead still reached Zoho, notification never arrived). Primary
+// transport is therefore now the Gmail API (same OAuth client and refresh
+// token as bragaremodeling.com, read from the same server-side env), with
+// ZeptoMail and mail() kept only as fallbacks.
 // Photo estimator uploads (resized to ~1600px JPEG in the browser).
 $photos = collectPhotos();
 if ($photos) {
@@ -118,13 +122,21 @@ if ($photos) {
     $saved = savePhotos($photos, $phoneDigits);
     if ($saved !== '') $body .= "\nServer copy: " . $saved;
 }
-$sent = sendViaZeptoMail($subject, $body, $email, $photos);
+$sent = sendViaGmailApi($subject, $body, $email, $photos);
 if (!$sent && $photos) {
-    error_log('[jax-lead] ZeptoMail with attachments failed; retrying without photos');
-    $sent = sendViaZeptoMail($subject, $body . "\n(Photos could not be attached to this email; see server copy above.)", $email);
+    error_log('[jax-lead] Gmail API with attachments failed; retrying without photos');
+    $sent = sendViaGmailApi($subject, $body . "\n(Photos could not be attached to this email; see server copy above.)", $email);
 }
 if (!$sent) {
-    error_log('[jax-lead] ZeptoMail transport failed, falling back to mail() for lead from page ' . $page . ' ZIP ' . $zip);
+    error_log('[jax-lead] Gmail API transport failed, falling back to ZeptoMail for lead from page ' . $page . ' ZIP ' . $zip);
+    $sent = sendViaZeptoMail($subject, $body, $email, $photos);
+    if (!$sent && $photos) {
+        error_log('[jax-lead] ZeptoMail with attachments failed; retrying without photos');
+        $sent = sendViaZeptoMail($subject, $body . "\n(Photos could not be attached to this email; see server copy above.)", $email);
+    }
+}
+if (!$sent) {
+    error_log('[jax-lead] Gmail+ZeptoMail transports failed, falling back to mail() for lead from page ' . $page . ' ZIP ' . $zip);
     $sent = mail(implode(', ', array_column(LEAD_RECIPIENTS, 0)), '=?UTF-8?B?' . base64_encode($subject) . '?=', $body, $headers, '-fwordpress@jaxtileandlvp.com');
 }
 if (!$sent) {
@@ -183,9 +195,10 @@ function jaxConfigFile(): ?array
 /**
  * Read one KEY=value from the BRAGA app's .env (same hosting account).
  * The hPanel env editor is the single, working rotation point for the
- * ZeptoMail token (the File Manager editor cannot be written by our
- * automation), so the Jax site resolves the token from there first.
- * The value is never logged.
+ * shared mail credentials (the ZeptoMail token historically, the Google
+ * Gmail OAuth values since 2026-10-25; the File Manager editor cannot be
+ * written by our automation), so the Jax site resolves them from there
+ * first. The value is never logged.
  */
 function bragaEnvValue(string $key): string
 {
@@ -241,6 +254,132 @@ function zeptoConfig(): ?array
     $token = (string)preg_replace('/^Zoho-enczapikey\s+/i', '', trim($token));
     if ($token === '') return null;
     return ['token' => $token, 'from' => $from];
+}
+
+/**
+ * Gmail API credentials: env JAX_GMAIL_* first, then the BRAGA app's .env
+ * (GOOGLE_GMAIL_CLIENT_ID / GOOGLE_GMAIL_CLIENT_SECRET /
+ * GOOGLE_GMAIL_REFRESH_TOKEN / GOOGLE_GMAIL_FROM — the live rotation point
+ * since bragaremodeling.com migrated to Gmail on 2026-10-25), then the
+ * gmail_* keys in the server config file (last resort).
+ * The values are never logged.
+ */
+function gmailConfig(): ?array
+{
+    $clientId = (string)(getenv('JAX_GMAIL_CLIENT_ID') ?: '');
+    $clientSecret = (string)(getenv('JAX_GMAIL_CLIENT_SECRET') ?: '');
+    $refreshToken = (string)(getenv('JAX_GMAIL_REFRESH_TOKEN') ?: '');
+    $from = (string)(getenv('JAX_GMAIL_FROM') ?: '');
+    if ($clientId === '' || $clientSecret === '' || $refreshToken === '' || $from === '') {
+        if ($clientId === '') $clientId = bragaEnvValue('GOOGLE_GMAIL_CLIENT_ID');
+        if ($clientSecret === '') $clientSecret = bragaEnvValue('GOOGLE_GMAIL_CLIENT_SECRET');
+        if ($refreshToken === '') $refreshToken = bragaEnvValue('GOOGLE_GMAIL_REFRESH_TOKEN');
+        if ($from === '') $from = bragaEnvValue('GOOGLE_GMAIL_FROM');
+    }
+    if ($clientId === '' || $clientSecret === '' || $refreshToken === '') {
+        $cfg = jaxConfigFile();
+        if (is_array($cfg)) {
+            if ($clientId === '') $clientId = (string)($cfg['gmail_client_id'] ?? '');
+            if ($clientSecret === '') $clientSecret = (string)($cfg['gmail_client_secret'] ?? '');
+            if ($refreshToken === '') $refreshToken = (string)($cfg['gmail_refresh_token'] ?? '');
+            if ($from === '') $from = (string)($cfg['gmail_from'] ?? '');
+        }
+    }
+    if ($clientId === '' || $clientSecret === '' || $refreshToken === '') return null;
+    if ($from === '') $from = 'Braga Website Leads <bragaoziel@gmail.com>';
+    return ['client_id' => $clientId, 'client_secret' => $clientSecret, 'refresh_token' => $refreshToken, 'from' => $from];
+}
+
+/**
+ * Send the lead notification through the Gmail API (users.messages.send),
+ * using the shared site OAuth client (refresh token, scope gmail.send) —
+ * the same transport bragaremodeling.com uses since 2026-10-25.
+ * Returns true only on a 2xx API response. Never throws, never logs secrets.
+ */
+function sendViaGmailApi(string $subject, string $body, string $replyToEmail, array $attachments = []): bool
+{
+    $cfg = gmailConfig();
+    if ($cfg === null) {
+        error_log('[jax-lead] Gmail API not configured (no client id/secret/refresh token)');
+        return false;
+    }
+    // 1) Exchange the refresh token for an access token.
+    $ch = curl_init('https://oauth2.googleapis.com/token');
+    if ($ch === false) return false;
+    curl_setopt_array($ch, [
+        CURLOPT_POST => true,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT => 12,
+        CURLOPT_CONNECTTIMEOUT => 4,
+        CURLOPT_POSTFIELDS => http_build_query([
+            'client_id' => $cfg['client_id'],
+            'client_secret' => $cfg['client_secret'],
+            'refresh_token' => $cfg['refresh_token'],
+            'grant_type' => 'refresh_token',
+        ]),
+    ]);
+    $tokenRes = curl_exec($ch);
+    $tokenCode = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    $tokenData = is_string($tokenRes) ? json_decode($tokenRes, true) : null;
+    $accessToken = is_array($tokenData) ? (string)($tokenData['access_token'] ?? '') : '';
+    if ($tokenCode < 200 || $tokenCode >= 300 || $accessToken === '') {
+        error_log('[jax-lead] Gmail OAuth refresh failed HTTP ' . $tokenCode);
+        return false;
+    }
+    // 2) Build the RFC 2822 message (plain text, or multipart with photos).
+    $from = str_replace(["\r", "\n"], '', $cfg['from']);
+    $toHeader = implode(', ', array_map(fn($a) => $a[1] . ' <' . $a[0] . '>', LEAD_RECIPIENTS));
+    $mailHeaders = [
+        'From: ' . $from,
+        'To: ' . $toHeader,
+        'Subject: =?UTF-8?B?' . base64_encode($subject) . '?=',
+        'Date: ' . gmdate('D, d M Y H:i:s') . ' +0000',
+        'MIME-Version: 1.0',
+    ];
+    if ($replyToEmail !== '' && filter_var($replyToEmail, FILTER_VALIDATE_EMAIL)) {
+        $mailHeaders[] = 'Reply-To: ' . str_replace(["\r", "\n"], '', $replyToEmail);
+    }
+    if ($attachments) {
+        $boundary = 'jax_' . bin2hex(random_bytes(8));
+        $mailHeaders[] = 'Content-Type: multipart/mixed; boundary="' . $boundary . '"';
+        $msg = implode("\r\n", $mailHeaders) . "\r\n\r\n"
+            . '--' . $boundary . "\r\n"
+            . "Content-Type: text/plain; charset=UTF-8\r\n\r\n"
+            . $body . "\r\n";
+        foreach ($attachments as $a) {
+            $msg .= '--' . $boundary . "\r\n"
+                . 'Content-Type: ' . $a['mime'] . '; name="' . $a['name'] . '"' . "\r\n"
+                . 'Content-Disposition: attachment; filename="' . $a['name'] . '"' . "\r\n"
+                . "Content-Transfer-Encoding: base64\r\n\r\n"
+                . chunk_split(base64_encode($a['data'])) . "\r\n";
+        }
+        $msg .= '--' . $boundary . "--\r\n";
+    } else {
+        $mailHeaders[] = 'Content-Type: text/plain; charset=UTF-8';
+        $msg = implode("\r\n", $mailHeaders) . "\r\n\r\n" . $body;
+    }
+    $raw = rtrim(strtr(base64_encode($msg), '+/', '-_'), '=');
+    // 3) Send via the Gmail API.
+    $ch = curl_init('https://gmail.googleapis.com/gmail/v1/users/me/messages/send');
+    if ($ch === false) return false;
+    curl_setopt_array($ch, [
+        CURLOPT_POST => true,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT => 12,
+        CURLOPT_CONNECTTIMEOUT => 4,
+        CURLOPT_HTTPHEADER => [
+            'Authorization: Bearer ' . $accessToken,
+            'Content-Type: application/json',
+        ],
+        CURLOPT_POSTFIELDS => json_encode(['raw' => $raw]),
+    ]);
+    $res = curl_exec($ch);
+    $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    if ($code >= 200 && $code < 300) return true;
+    error_log('[jax-lead] Gmail API send failed HTTP ' . $code . ': ' . substr((string)$res, 0, 200));
+    return false;
 }
 
 /**
