@@ -112,3 +112,5 @@ label.check{display:flex;gap:10px;align-items:flex-start;font-weight:700}label.c
 .hero-quick-form .row{grid-template-columns:1fr 1fr;gap:10px}
 
 .review-grid{display:grid;gap:1rem;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));margin:1rem 0}.review-card{margin:0}.review-card p{margin:0 0 .75rem}.review-card footer{font-weight:700;font-size:.9rem}
+
+.financing-banner{margin:0;padding:10px 16px;text-align:center;font-weight:800;font-size:.92rem;background:var(--sky);border-bottom:1px solid var(--line)}.financing-banner a{color:var(--navy);text-decoration:none}.financing-banner a:hover{text-decoration:underline;color:var(--blue)}

@@ -36,7 +36,7 @@ jobs:
           set -euo pipefail
           mkdir -p dist
           cp 404.html index.html robots.txt sitemap.xml .htaccess 106a8d36a65ca579bcc64829d3a74ab7.txt dist/
-          cp -R api assets contact floor-removal-preparation privacy projects service-areas tile-installation-jacksonville vinyl-flooring-jacksonville dist/
+          cp -R api assets contact financing floor-removal-preparation privacy projects service-areas tile-installation-jacksonville vinyl-flooring-jacksonville dist/
           (cd dist && zip -qr ../jax-tile-and-lvp-production.zip .)
           test -s jax-tile-and-lvp-production.zip
       - name: Upload validated production package
