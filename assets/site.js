@@ -161,3 +161,75 @@ document.querySelectorAll('.lvp-swatch').forEach(b=>b.addEventListener('click',(
 document.querySelectorAll('select[name="color_pick"]').forEach(s=>s.addEventListener('change',()=>setLvpColor(s.value,true)));
 try{const c=sessionStorage.getItem('jax_color');if(c)setLvpColor(c,false);}catch{}
 window.setLvpColor=setLvpColor;
+
+// ---------- Live Google reviews (Braga Remodeling GBP) ----------
+const GOOGLE_REVIEWS_URL='https://search.google.com/local/reviews?placeid=ChIJ-bI5F1N2jYcRepVs4CTp9dc';
+const GOOGLE_REVIEWS_FEEDS=['/api/google-reviews.php','https://bragaremodeling.com/api/google-reviews'];
+const GOOGLE_REVIEWS_INSERT_RE=/^\/($|vinyl-flooring-|tile-installation-|waterproof-lvp-flooring|lvp-installation-|tile-to-lvp|carpet-to-lvp|shower-tile-installation|backsplash-installation)/;
+
+function starsHtml(rating){
+  const filled=Math.max(0,Math.min(5,Math.round(Number(rating)||0)));
+  let html='<span class="review-stars" aria-label="'+filled+' star review">';
+  for(let i=0;i<5;i++) html+=i<filled?'★':'☆';
+  return html+'</span>';
+}
+
+function escapeHtml(value){
+  return String(value).replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+}
+
+function reviewsSectionTemplate(){
+  return '<section id="reviews" class="section reviews-section" data-google-reviews data-cta-location="reviews"><span class="eyebrow">Google reviews</span><h2 data-google-reviews-heading>What homeowners say about Braga Remodeling</h2><p class="section-intro">Jax Tile &amp; LVP is operated by Braga Remodeling. Customer reviews are posted on the Braga Remodeling Google Business Profile.</p><p class="review-summary" data-google-reviews-summary hidden></p><div class="review-grid" data-google-reviews-grid></div><p class="google-attr">Reviews from Google</p><p><a class="text-link" data-google-reviews-link href="'+GOOGLE_REVIEWS_URL+'" target="_blank" rel="noopener noreferrer">See all reviews on Google →</a></p></section>';
+}
+
+function renderGoogleReviews(section,data){
+  const live=data&&(data.rating!=null||data.count!=null||(Array.isArray(data.reviews)&&data.reviews.length));
+  const heading=section.querySelector('[data-google-reviews-heading], h2');
+  const summary=section.querySelector('[data-google-reviews-summary]');
+  const grid=section.querySelector('[data-google-reviews-grid], .review-grid');
+  const link=section.querySelector('[data-google-reviews-link], a[href*="placeid="], a[href*="place_id="]');
+  if(link&&data&&data.reviewsUrl) link.href=data.reviewsUrl;
+  if(live&&heading&&data.rating!=null) heading.textContent='Rated '+Number(data.rating).toFixed(1)+' by Jacksonville homeowners';
+  if(summary){
+    if(live&&(data.rating!=null||data.count!=null)){
+      const bits=[];
+      if(data.rating!=null) bits.push(Number(data.rating).toFixed(1)+' average on Google');
+      if(data.count!=null) bits.push(data.count+' Google review'+(data.count===1?'':'s'));
+      summary.innerHTML=(data.rating!=null?starsHtml(data.rating)+' ':'')+escapeHtml(bits.join(' · '));
+      summary.hidden=false;
+    }
+  }
+  if(live&&grid&&Array.isArray(data.reviews)&&data.reviews.length){
+    grid.innerHTML=data.reviews.map(review=>{
+      const author=escapeHtml(review.author||'Google user');
+      const text=escapeHtml(review.text||'');
+      const time=review.relativeTime?'<span class="review-when">'+escapeHtml(review.relativeTime)+'</span>':'';
+      const star=review.rating!=null?starsHtml(review.rating):'';
+      return '<blockquote class="card review-card">'+star+'<p>&ldquo;'+text+'&rdquo;</p><footer>'+author+(time?' · '+time:'')+' · Google review</footer></blockquote>';
+    }).join('');
+  }
+}
+
+async function loadGoogleReviews(){
+  let section=document.getElementById('reviews')||document.querySelector('[data-google-reviews]');
+  if(!section&&GOOGLE_REVIEWS_INSERT_RE.test(location.pathname)){
+    const hook=document.getElementById('faq')||document.querySelector('footer')||document.querySelector('.site-footer');
+    if(!hook) return;
+    hook.insertAdjacentHTML('beforebegin',reviewsSectionTemplate());
+    section=document.getElementById('reviews');
+  }
+  if(!section) return;
+  for(const url of GOOGLE_REVIEWS_FEEDS){
+    try{
+      const response=await fetch(url,{headers:{Accept:'application/json'}});
+      if(!response.ok) continue;
+      const data=await response.json();
+      if(data&&(data.rating!=null||data.count!=null||(Array.isArray(data.reviews)&&data.reviews.length))){
+        renderGoogleReviews(section,data);
+        return;
+      }
+    }catch(err){}
+  }
+}
+
+loadGoogleReviews();
