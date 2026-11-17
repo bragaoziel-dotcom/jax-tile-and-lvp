@@ -124,6 +124,8 @@ if ($photos) {
     $saved = savePhotos($photos, $phoneDigits);
     if ($saved !== '') $body .= "\nServer copy: " . $saved;
 }
+$GLOBALS['jax_mail_errors'] = [];
+$transport = 'gmail';
 $sent = sendViaGmailApi($subject, $body, $email, $photos);
 if (!$sent && $photos) {
     error_log('[jax-lead] Gmail API with attachments failed; retrying without photos');
@@ -131,6 +133,7 @@ if (!$sent && $photos) {
 }
 if (!$sent) {
     error_log('[jax-lead] Gmail API transport failed, falling back to ZeptoMail for lead from page ' . $page . ' ZIP ' . $zip);
+    $transport = 'zeptomail';
     $sent = sendViaZeptoMail($subject, $body, $email, $photos);
     if (!$sent && $photos) {
         error_log('[jax-lead] ZeptoMail with attachments failed; retrying without photos');
@@ -139,11 +142,23 @@ if (!$sent) {
 }
 if (!$sent) {
     error_log('[jax-lead] Gmail+ZeptoMail transports failed, falling back to mail() for lead from page ' . $page . ' ZIP ' . $zip);
+    $transport = 'mail()';
     $sent = mail(implode(', ', array_column(LEAD_RECIPIENTS, 0)), '=?UTF-8?B?' . base64_encode($subject) . '?=', $body, $headers, '-fwordpress@jaxtileandlvp.com');
 }
+// Hostinger mail() returns true but silently drops lead mail (see above), so
+// only Gmail API / ZeptoMail count as verified delivery. Anything else is
+// recorded as UNVERIFIED: the full lead is saved to a private backup file,
+// the failure is logged, and /api/lead-health.php reports it (no PII).
+$verified = $sent && $transport !== 'mail()';
+recordDelivery($leadId, $verified ? 'sent' : ($sent ? 'unverified' : 'failed'), $transport, $GLOBALS['jax_mail_errors'] ?? [], $subject, $body);
 if (!$sent) {
     error_log('[jax-lead] all notification transports failed for lead from page ' . $page . ' ZIP ' . $zip);
-    respond(['ok' => false, 'message' => 'Unable to send right now.'], 503);
+    if (zohoConfigOk()) {
+        // The lead is still saved (backup file + Zoho below); do not lose the customer.
+        $sent = true;
+    } else {
+        respond(['ok' => false, 'message' => 'Unable to send right now.'], 503);
+    }
 }
 touch($cache);
 
@@ -206,6 +221,57 @@ function classifyLeadSource(): string
     if ((substr($host, -strlen('nextdoor.com')) === 'nextdoor.com')) return 'Nextdoor';
     if ((substr($host, -strlen('bragaremodeling.com')) === 'bragaremodeling.com')) return 'bragaremodeling.com';
     return "Other referrer ($host)";
+}
+
+function jaxLogDir(): ?string
+{
+    $docRoot = realpath(__DIR__ . '/..');
+    if ($docRoot === false) return null;
+    $dir = dirname($docRoot) . '/.jax-lead-log';
+    if (!is_dir($dir)) @mkdir($dir, 0700, true);
+    return is_dir($dir) ? $dir : null;
+}
+
+function zohoConfigOk(): bool
+{
+    return jaxConfigFile() !== null;
+}
+
+/**
+ * Delivery record for every accepted lead (outside the web root):
+ * - deliveries.jsonl: one line per lead (id, status, transport, errors; no body)
+ * - undelivered/<lead id>.txt: full email text when delivery is not verified
+ * - status.json: last success / last failure, read by api/lead-health.php
+ */
+function recordDelivery(string $leadId, string $status, string $transport, array $errors, string $subject, string $body): void
+{
+    try {
+        $dir = jaxLogDir();
+        if ($dir === null) return;
+        $now = gmdate('c');
+        $entry = ['at' => $now, 'lead_id' => $leadId, 'status' => $status, 'transport' => $transport, 'errors' => array_values($errors)];
+        @file_put_contents($dir . '/deliveries.jsonl', json_encode($entry, JSON_UNESCAPED_SLASHES) . "\n", FILE_APPEND | LOCK_EX);
+        if ($status !== 'sent') {
+            if (!is_dir($dir . '/undelivered')) @mkdir($dir . '/undelivered', 0700, true);
+            @file_put_contents($dir . '/undelivered/' . preg_replace('/[^A-Za-z0-9-]/', '', $leadId) . '.txt', "Subject: $subject\n\n$body\n", LOCK_EX);
+            error_log('[jax-lead] DELIVERY ' . strtoupper($status) . ' lead ' . $leadId . ' via ' . $transport . ' errors: ' . implode(' | ', $errors));
+        }
+        $statusFile = $dir . '/status.json';
+        $st = is_file($statusFile) ? (json_decode((string)@file_get_contents($statusFile), true) ?: []) : [];
+        if ($status === 'sent') {
+            $st['last_ok_at'] = $now;
+            $st['last_ok_transport'] = $transport;
+            $st['consecutive_failures'] = 0;
+        } else {
+            $st['last_fail_at'] = $now;
+            $st['last_fail_status'] = $status;
+            $st['last_fail_errors'] = array_values($errors);
+            $st['consecutive_failures'] = (int)($st['consecutive_failures'] ?? 0) + 1;
+        }
+        @file_put_contents($statusFile, json_encode($st, JSON_UNESCAPED_SLASHES), LOCK_EX);
+    } catch (\Throwable $e) {
+        error_log('[jax-lead] delivery record failed: ' . $e->getMessage());
+    }
 }
 
 /**
@@ -371,6 +437,7 @@ function sendViaGmailApi(string $subject, string $body, string $replyToEmail, ar
     $cfg = gmailConfig();
     if ($cfg === null) {
         error_log('[jax-lead] Gmail API not configured (no client id/secret/refresh token)');
+        $GLOBALS['jax_mail_errors'][] = 'gmail: not configured';
         return false;
     }
     // 1) Exchange the refresh token for an access token.
@@ -395,6 +462,8 @@ function sendViaGmailApi(string $subject, string $body, string $replyToEmail, ar
     $accessToken = is_array($tokenData) ? (string)($tokenData['access_token'] ?? '') : '';
     if ($tokenCode < 200 || $tokenCode >= 300 || $accessToken === '') {
         error_log('[jax-lead] Gmail OAuth refresh failed HTTP ' . $tokenCode);
+        $oauthErr = is_array($tokenData) ? (string)($tokenData['error'] ?? '') : '';
+        $GLOBALS['jax_mail_errors'][] = 'gmail: oauth refresh HTTP ' . $tokenCode . ($oauthErr !== '' ? ' ' . preg_replace('/[^a-z_]/i', '', $oauthErr) : '');
         return false;
     }
     // 2) Build the RFC 2822 message (plain text, or multipart with photos).
@@ -449,6 +518,7 @@ function sendViaGmailApi(string $subject, string $body, string $replyToEmail, ar
     curl_close($ch);
     if ($code >= 200 && $code < 300) return true;
     error_log('[jax-lead] Gmail API send failed HTTP ' . $code . ': ' . substr((string)$res, 0, 200));
+    $GLOBALS['jax_mail_errors'][] = 'gmail: send HTTP ' . $code;
     return false;
 }
 
@@ -461,6 +531,7 @@ function sendViaZeptoMail(string $subject, string $body, string $replyToEmail, a
     $cfg = zeptoConfig();
     if ($cfg === null) {
         error_log('[jax-lead] ZeptoMail not configured (no token/from)');
+        $GLOBALS['jax_mail_errors'][] = 'zeptomail: not configured';
         return false;
     }
     $payload = [
@@ -496,6 +567,7 @@ function sendViaZeptoMail(string $subject, string $body, string $replyToEmail, a
     curl_close($ch);
     if ($code >= 200 && $code < 300) return true;
     error_log('[jax-lead] ZeptoMail send failed HTTP ' . $code . ': ' . substr((string)$res, 0, 200));
+    $GLOBALS['jax_mail_errors'][] = 'zeptomail: send HTTP ' . $code;
     return false;
 }
 
