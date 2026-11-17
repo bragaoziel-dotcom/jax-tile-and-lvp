@@ -61,13 +61,13 @@ if(INSTAGRAM_URL){document.querySelectorAll('.js-instagram').forEach(link=>{link
 document.querySelectorAll('.js-instagram').forEach(link=>link.addEventListener('click',()=>dataLayerPush('social_click',{social_network:'instagram',cta_location:ctaLocation(link)})));
 
 // ---------- 60-second price quiz ----------
-const PRICING={promo:3.99,plus:4.49,premium:4.99,minSqft:1000,shoeLF:2.99,lfPerSqftLow:.30,lfPerSqftHigh:.45,roomSqft:170,measureSlack:.10,smallTiers:[[999,0,'under 1,000 sq ft']],removal:{carpet:[.50,.50],tile:[2.00,2.00],glued:[2.00,2.00],floating:[.75,.75],concrete:[0,0]},dumpster:400,stairs:{'0':[0,0],few:[1,5],one:[12,14],two:[24,28]},stairLow:85,stairHigh:110};
+const PRICING={std:4.99,minSqft:0,shoeLF:2.99,lfPerSqftLow:.30,lfPerSqftHigh:.45,roomSqft:170,measureSlack:.10,smallTiers:[],removal:{carpet:[.50,.50],tile:[2.00,2.00],glued:[2.00,2.00],floating:[.75,.75],concrete:[0,0]},dumpster:400,stairs:{'0':[0,0],few:[1,5],one:[12,14],two:[24,28]},stairLow:85,stairHigh:110};
 const money=n=>'$'+Math.round(n).toLocaleString('en-US');
-const smallTier=s=>{const r=Math.round(s);return r<PRICING.minSqft?PRICING.smallTiers.find(t=>r<=t[0])||null:null;};
+const smallTier=()=>null; // owner rule 2026-11-16: $4.99/sq ft material + installation, any size (no minimum)
 const quiz=document.querySelector('#lvp-quiz');
 let calcSummary='';
 if(quiz){
-  const T={size:'~{s} sq ft',min:' (under 1,000 sq ft: packages do not apply)',from:'from ',base:'Floor + installation',rem:'Removal of current floor',stairs:'Stairs',shoe:'Shoe molding (Promo/Premium)',shoeUnsure:'Shoe molding, if wanted (Promo/Premium)'};
+  const T={size:'~{s} sq ft',min:'',from:'from ',base:'Floor + installation',rem:'Removal of current floor',stairs:'Stairs',shoe:'Shoe molding',shoeUnsure:'Shoe molding, if wanted'};
   const steps=[...quiz.querySelectorAll('.q-step')],result=quiz.querySelector('.q-result'),next=quiz.querySelector('.q-next'),back=quiz.querySelector('.q-back'),nav=quiz.querySelector('.q-nav'),bar=quiz.querySelector('.quiz-progress span'),now=quiz.querySelector('.q-now'),top=quiz.querySelector('.quiz-top');
   let step=1,started=false;
   const val=name=>quiz.querySelector(`input[name="${name}"]:checked`)?.value||'';
@@ -77,46 +77,27 @@ if(quiz){
   const go=n=>{show(n);dataLayerPush(n>steps.length?'quiz_complete':'quiz_step',n>steps.length?{cta_location:'quiz',sqft_bucket:bucket(sqftOf()),current_floor:val('q_floor'),stairs:val('q_stairs'),shoe_molding:val('q_shoe')}:{cta_location:'quiz',quiz_step:n});if(n>steps.length)dataLayerPush('calculator_estimate',{cta_location:'quiz',sqft_bucket:bucket(sqftOf()),quote_type:smallTier(sqftOf())?'under_min':'package'});quiz.scrollIntoView({behavior:'smooth',block:'start'});};
   const bucket=s=>s<500?'<500':s<1000?'500-999':s<1500?'1000-1499':s<2500?'1500-2499':'2500+';
   function compute(){
-    const sqft=sqftOf(),hi=sqft*(1+PRICING.measureSlack),bL=Math.max(sqft,PRICING.minSqft),bH=Math.max(hi,PRICING.minSqft);
+    const sqft=sqftOf(),hi=sqft*(1+PRICING.measureSlack),bL=sqft,bH=hi;
     const floor=val('q_floor'),[rL,rH]=PRICING.removal[floor]||[0,0],remL=sqft*rL,remH=hi*rH;const dump=(rH>0||rL>0)?PRICING.dumpster:0;
     const [sL,sH]=PRICING.stairs[val('q_stairs')]||[0,0],stL=sL*PRICING.stairLow,stH=sH*PRICING.stairHigh;
     const shoe=val('q_shoe'),lfL=Math.round(sqft*PRICING.lfPerSqftLow),lfH=Math.round(hi*PRICING.lfPerSqftHigh);
     const shL=shoe==='yes'?lfL*PRICING.shoeLF:0,shH=shoe==='no'?0:lfH*PRICING.shoeLF;
     const range=(a,b)=>Math.round(a)===Math.round(b)?money(a):`${money(a)}–${money(b)}`;
-    const promo=[bL*PRICING.promo+remL+stL+shL+dump,bH*PRICING.promo+remH+stH+shH+dump];
-    const plus=[bL*PRICING.plus+remL+stL+dump,bH*PRICING.plus+remH+stH+dump];
-    const premium=bL*PRICING.premium+remL+stL+shL+dump;
+    const promo=[bL*PRICING.std+remL+stL+shL+dump,bH*PRICING.std+remH+stH+shH+dump];
     quiz.querySelector('.q-size').textContent=T.size.replace('{s}',Math.round(sqft).toLocaleString('en-US'))+(smallTier(sqft)?T.min:'');
     const tier=smallTier(sqft),small=!!tier;
     quiz.dataset.quote=small?'under_min':'package';
     quiz.querySelector('.q-small')?.toggleAttribute('hidden',!small);
     quiz.querySelector('.q-packages')?.toggleAttribute('hidden',small);
     const formHead=document.querySelector('#calc-lead-form .form-heading'),formBtn=document.querySelector('#calc-lead-form button[type=submit]');
-    if(formHead){formHead.dataset.def=formHead.dataset.def||formHead.textContent;formHead.textContent=small?'Under 1,000 sq ft? Leave your number and we’ll text you about your project.':formHead.dataset.def;}
+    if(formHead){formHead.dataset.def=formHead.dataset.def||formHead.textContent;formHead.textContent=formHead.dataset.def;}
     if(formBtn){formBtn.dataset.def=formBtn.dataset.def||formBtn.textContent;formBtn.textContent=small?'Text Me About My Project':formBtn.dataset.def;}
-    if(small){
-      const xL=remL+stL+shL+dump,xH=remH+stH+shH+dump;
-      quiz.querySelector('.q-flat').textContent='Custom quote';
-      quiz.querySelector('.q-tier').textContent='The $3.99 package and the Plus and Premium prices are for 1,000 sq ft and up.';
-      const list=quiz.querySelector('#calc-breakdown');list.replaceChildren();
-      const lines=[];
-      if(remH)lines.push([T.rem,remL,remH]);if(dump)lines.push(['Dumpster (haul-away)',dump,dump]);if(stH)lines.push([T.stairs+` (${sL}–${sH})`,stL,stH]);if(shH)lines.push([(shoe==='yes'?'Shoe molding':'Shoe molding, if wanted')+` (~${lfL}–${lfH} LF)`,shL,shH]);
-      lines.forEach(([label,a,b])=>{const li=document.createElement('li');const sp=document.createElement('span');sp.textContent=label;const v=document.createElement('b');v.textContent=range(a,b);li.append(sp,v);list.appendChild(li);});
-      calcSummary=`Quiz: ~${Math.round(sqft)} sq ft; UNDER 1,000 SQ FT (no package price shown)`+(xH?`; add-ons ${range(xL,xH)}`:'')+`; floor ${val('q_floor')}; stairs ${val('q_stairs')}; shoe ${shoe}`;
-      const form=document.querySelector('#calc-lead-form');if(form){const s=form.querySelector('[name="sqft"]');if(s)s.value=Math.round(sqft);const map={carpet:'Carpet',tile:'Tile',glued:'Wood / laminate',floating:'Wood / laminate',concrete:'Bare concrete slab'};const cf=form.querySelector('[name="current_floor"]');if(cf&&map[val('q_floor')])cf.value=map[val('q_floor')];}
-      return;}
     quiz.querySelector('.q-promo').textContent=range(...promo);
-    quiz.querySelector('.q-plus').textContent=range(...plus);
-    quiz.querySelector('.q-premium').textContent=T.from+money(premium);
-    const saveEl=quiz.querySelector('.q-plus-save');let saveNote='';
-    if(saveEl){saveEl.hidden=true;
-      if(shoe==='yes'){const svL=promo[0]-plus[0],svH=promo[1]-plus[1];if(svL>0){saveEl.textContent=`Bundle deal: you save ${range(svL,svH)} vs. Promo with shoe molding added`;saveEl.hidden=false;saveNote=`; Plus bundle saves ${range(svL,svH)}`;}}
-      else if(shoe==='unsure'){const svH=promo[1]-plus[1];if(svH>0){saveEl.textContent=`With shoe molding, Plus saves you up to ${money(svH)} vs. Promo`;saveEl.hidden=false;saveNote=`; Plus saves up to ${money(svH)} with shoe`;}}}
     const list=quiz.querySelector('#calc-breakdown');list.replaceChildren();
-    const lines=[[T.base+' (Promo)',bL*PRICING.promo,bH*PRICING.promo]];
+    const lines=[[T.base+' ($4.99/sq ft)',bL*PRICING.std,bH*PRICING.std]];
     if(remH)lines.push([T.rem,remL,remH]);if(dump)lines.push(['Dumpster (haul-away)',dump,dump]);if(stH)lines.push([T.stairs+` (${sL}–${sH})`,stL,stH]);if(shH)lines.push([(shoe==='yes'?T.shoe:T.shoeUnsure)+` (~${lfL}–${lfH} LF)`,shL,shH]);
     lines.forEach(([label,a,b])=>{const li=document.createElement('li');const s=document.createElement('span');s.textContent=label;const v=document.createElement('b');v.textContent=range(a,b);li.append(s,v);list.appendChild(li);});
-    calcSummary=`Quiz: ~${Math.round(sqft)} sq ft; floor ${val('q_floor')}; stairs ${val('q_stairs')}; shoe ${shoe}; Promo ${range(...promo)}; Plus ${range(...plus)}; Premium from ${money(premium)}`+saveNote;
+    calcSummary=`Quiz: ~${Math.round(sqft)} sq ft; floor ${val('q_floor')}; stairs ${val('q_stairs')}; shoe ${shoe}; estimate ${range(...promo)} at $4.99/sq ft`;
     const form=document.querySelector('#calc-lead-form');
     if(form){const s=form.querySelector('[name="sqft"]');if(s)s.value=Math.round(sqft);const map={carpet:'Carpet',tile:'Tile',glued:'Wood / laminate',floating:'Wood / laminate',concrete:'Bare concrete slab'};const cf=form.querySelector('[name="current_floor"]');if(cf&&map[val('q_floor')])cf.value=map[val('q_floor')];}
   }

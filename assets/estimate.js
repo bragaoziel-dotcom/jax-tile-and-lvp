@@ -1,7 +1,7 @@
 // Photo estimator: rooms + photos + live price. Submits through /api/lead.php (same pipeline as the other forms).
 (()=>{
 const form=document.getElementById('est-form');if(!form)return;
-const INSTALL=3.99;const MIN_SQFT=1000;
+const INSTALL=4.99;const MIN_SQFT=0; // owner rule 2026-11-16: $4.99/sq ft material + installation, any size
 const REMOVAL={none:{label:'No removal (bare floor / we\u2019ll check)',rate:0},carpet:{label:'Carpet & pad removal',rate:0.50},floating:{label:'Floating LVP / laminate removal',rate:0.75},tile:{label:'Tile or glued-down removal (from)',rate:2.00}};
 const MAX_PHOTOS=12;
 const roomsEl=document.getElementById('rooms'),linesEl=document.getElementById('est-lines'),sumEl=document.getElementById('est-sum');
@@ -48,9 +48,7 @@ function rooms(){return [...roomsEl.children].map((el,i)=>{
   return {id:+el.dataset.id,el,name:(el.querySelector('[name=room_name]').value||`Room ${i+1}`).trim(),len,wid,sq,rem,dims:sqIn>0?`${sq} sq ft`:(len&&wid?`${len} x ${wid} ft = ${sq} sq ft`:'size not given')};
 });}
 function totals(){const rs=rooms();const sq=rs.reduce((a,r)=>a+r.sq,0);const rem={};rs.forEach(r=>{if(r.rem!=='none'&&r.sq)rem[r.rem]=(rem[r.rem]||0)+r.sq;});
-  // The $3.99 package is for 1,000 sq ft and up; smaller areas get a custom quote (no published price).
-  const under=sq>0&&sq<MIN_SQFT;
-  if(under)return {rs,sq,under,lines:[[`${sq.toLocaleString('en-US')} sq ft: under the 1,000 sq ft package minimum`,null]],total:0};
+  const under=false;
   const lines=[[`Install ${sq.toLocaleString('en-US')} sq ft × ${rate(INSTALL)}`,sq*INSTALL]];
   Object.entries(rem).forEach(([k,s])=>{lines.push([`${REMOVAL[k].label} ${s.toLocaleString('en-US')} sq ft × ${rate(REMOVAL[k].rate)}`,s*REMOVAL[k].rate]);});
   return {rs,sq,under,lines,total:lines.reduce((a,l)=>a+l[1],0)};}
@@ -71,7 +69,7 @@ form.addEventListener('submit',async e=>{
   if(!/^\d{5}$/.test(f.zip.value.trim())){setStatus('Please enter a 5-digit ZIP code.','error');f.zip.focus();return;}
   if(!t.sq&&!totalPhotos()){setStatus('Add a room size or at least one photo.','error');return;}
   const color=f.color_pick.value||'';
-  const summary=['PHOTO ESTIMATOR',...t.rs.map(r=>`- ${r.name}: ${r.dims}; removal: ${r.rem==='none'?'none':REMOVAL[r.rem].label+' '+rate(REMOVAL[r.rem].rate)+'/sq ft'}; photos: ${photos.get(r.id).length}`),...t.lines.map(([l,v])=>`${l} = ${v===null?'custom quote':money(v)}`),t.under?`UNDER 1,000 SQ FT: no package price shown to customer (custom quote)`:`ESTIMATED TOTAL: ${money(t.total)} (shown to customer; leveling/molding/stairs/dumpster quoted separately)`,`Color: ${color||'not chosen'}`].join('\n');
+  const summary=['PHOTO ESTIMATOR',...t.rs.map(r=>`- ${r.name}: ${r.dims}; removal: ${r.rem==='none'?'none':REMOVAL[r.rem].label+' '+rate(REMOVAL[r.rem].rate)+'/sq ft'}; photos: ${photos.get(r.id).length}`),...t.lines.map(([l,v])=>`${l} = ${v===null?'custom quote':money(v)}`),`ESTIMATED TOTAL: ${money(t.total)} (shown to customer; leveling/molding/stairs/dumpster quoted separately)`,`Color: ${color||'not chosen'}`].join('\n');
   const fd=new FormData();
   [['name',f.name.value],['phone',f.phone.value],['zip',f.zip.value.trim()],['email',f.email.value],['website',f.website.value]].forEach(([k,v])=>fd.append(k,v));
   fd.append('service','LVP Installed');fd.append('page','Photo estimator');fd.append('sqft',String(t.sq));
@@ -85,7 +83,7 @@ form.addEventListener('submit',async e=>{
     const response=await fetch(form.action,{method:'POST',body:fd,headers:{Accept:'application/json'}});
     const result=await response.json();
     if(!response.ok||!result.ok)throw new Error(result.message||'Unable to send');
-    setStatus('Thank you! We got your rooms and photos. Oziel will text you your written quote shortly.','success');
+    setStatus('Thank you! We got your rooms and photos. Braga will text you your written quote shortly.','success');
     if(result.trackConversion){if(typeof window.jaxTrackLeadConversion==='function')window.jaxTrackLeadConversion();push('generate_lead',{service:'LVP Installed',form_name:'photo-estimator',source_page:document.title,lead_source:'photo_estimator'});if(result.qualified){if(typeof window.jaxTrackQualifiedLead==='function')window.jaxTrackQualifiedLead(result.leadId);push('qualified_lead',{service:'LVP Installed',form_name:'photo-estimator'});}}
   }catch(err){setStatus(err.message&&err.message!=='Unable to send'?err.message:'We could not send the request. Please call or text (904) 520-1994.','error');push('lead_form_error',{form_name:'photo-estimator'});}
   finally{form.dataset.sending='0';}

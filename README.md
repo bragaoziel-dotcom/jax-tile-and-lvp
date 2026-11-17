@@ -17,7 +17,7 @@ Legacy/cross-business tracking IDs are blocked by CI.
 
 ## Included
 
-- LVP-only sales landing page: Promo $3.99 / Plus $4.49 / Premium from $4.99 per sq ft installed (1,000 sq ft minimum), 60-second price quiz, add-on price table; English-only (under 1,000 sq ft = custom quote, no price shown; small rooms not advertised)
+- LVP-only sales landing page: one standard price, $4.99/sq ft material + installation for ANY size (owner rule 2026-11-16; the old Promo $3.99 / Plus $4.49 / Premium tiers and the 1,000 sq ft minimum are retired), 60-second price quiz, add-on price table; English-only
 - Real Braga Remodeling LVP project imagery stored locally in Jax assets
 - Optimized WebP brand logo for visible page use
 - Call and SMS CTAs using `(904) 520-1994`
@@ -27,7 +27,7 @@ Legacy/cross-business tracking IDs are blocked by CI.
 - Service pages, service-area page, project gallery and privacy page
 - `robots.txt`, `sitemap.xml`, canonical URLs and structured data
 - `.htaccess`: 301 www → apex, 301 legacy `*.html` and `/index.html` copies → the trailing-slash canonical URL, 301 `/portugues/` (and `/pt/`, `/es/`) → `/`, blocks `/docs`, `/scripts`, `/.github`, `README.md`
-- Tile installation is a real page again (`/tile-installation-jacksonville/`). It is quoted after a measure and is not the $3.99 LVP package. Do not redirect it back to the homepage.
+- Tile installation is a real page again (`/tile-installation-jacksonville/`). It is quoted after a measure and is not the $4.99 LVP package. Do not redirect it back to the homepage.
 
 ## Placeholders to fill (search the repo for `TODO(Oziel)`)
 
