@@ -25,8 +25,29 @@ document.head.appendChild(brandFix);
 // Attribution is retained only for the lead backend/email. Do not send click IDs,
 // contact details or free-text project information to GA4, GTM, Google Ads or Meta.
 const params=new URLSearchParams(window.location.search);
-const attribution={};
-['utm_source','utm_medium','utm_campaign','utm_term','utm_content','gclid','gbraid','wbraid','fbclid'].forEach(key=>{const value=params.get(key);if(value){attribution[key]=value;try{sessionStorage.setItem('jax_'+key,value)}catch{}}else{try{const saved=sessionStorage.getItem('jax_'+key);if(saved)attribution[key]=saved}catch{}}});
+// First-touch acquisition record (localStorage, 90 days): UTM set, click IDs,
+// external referrer and landing page. A new UTM set or click ID replaces the
+// record as one unit; internal navigation never overwrites it. Sent to
+// /api/lead.php as hidden fields so each lead email shows its "Lead source".
+const ATTR_KEYS=['utm_source','utm_medium','utm_campaign','utm_term','utm_content','gclid','gbraid','wbraid','fbclid'];
+const attribution=(()=>{
+  const KEY='jax_attr_v1',MAX_AGE=90*864e5;
+  const cut=(v,n)=>String(v||'').trim().slice(0,n);
+  let ref=cut(document.referrer,300),internal=false;
+  try{if(ref&&new URL(ref).hostname.replace(/^www\./,'')===location.hostname.replace(/^www\./,''))internal=true}catch{}
+  let stored=null;try{stored=JSON.parse(localStorage.getItem(KEY)||'null');if(stored&&Date.now()-Date.parse(stored.first_seen||0)>MAX_AGE)stored=null}catch{stored=null}
+  const current={};ATTR_KEYS.forEach(k=>{const v=cut(params.get(k),180);if(v)current[k]=v});
+  const hasCampaign=Object.keys(current).length>0;
+  let record=stored;
+  if(hasCampaign||(!stored&&!internal)){
+    record=Object.assign(current,{landing_page:cut(location.pathname+location.search,300),first_referrer:internal?'':ref,first_seen:new Date().toISOString()});
+    try{localStorage.setItem(KEY,JSON.stringify(record))}catch{}
+  }
+  const out={};if(record)Object.keys(record).forEach(k=>{if(record[k])out[k]=String(record[k])});
+  try{ATTR_KEYS.forEach(k=>{if(out[k])sessionStorage.setItem('jax_'+k,out[k])})}catch{}
+  return out;
+})();
+window.jaxAttribution=attribution;
 
 document.querySelectorAll('a[href^="tel:"]').forEach(link=>link.addEventListener('click',()=>dataLayerPush('phone_click',{cta_location:ctaLocation(link)})));
 document.querySelectorAll('a[href^="sms:"]:not(.js-booking)').forEach(link=>link.addEventListener('click',()=>dataLayerPush('sms_click',{cta_location:ctaLocation(link)})));

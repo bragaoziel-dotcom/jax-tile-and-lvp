@@ -77,7 +77,7 @@ form.addEventListener('submit',async e=>{
   fd.append('service','LVP Installed');fd.append('page','Photo estimator');fd.append('sqft',String(t.sq));
   const rems=new Set(t.rs.map(r=>r.rem));fd.append('current_floor',rems.has('carpet')?'Carpet':rems.has('tile')?'Tile':rems.has('floating')?'Wood / laminate':'Other / not sure');
   fd.append('color',color);fd.append('estimate_summary',summary);fd.append('estimated_total',String(Math.round(t.total)));fd.append('elapsed_ms',String(Date.now()-loadedAt));
-  try{['utm_source','utm_medium','utm_campaign','utm_term','utm_content','gclid','gbraid','wbraid','fbclid'].forEach(k=>{const v=new URLSearchParams(location.search).get(k)||sessionStorage.getItem('jax_'+k);if(v)fd.append(k,v);});}catch{}
+  try{const a=window.jaxAttribution||{};['utm_source','utm_medium','utm_campaign','utm_term','utm_content','gclid','gbraid','wbraid','fbclid','landing_page','first_referrer','first_seen'].forEach(k=>{const v=a[k]||new URLSearchParams(location.search).get(k)||sessionStorage.getItem('jax_'+k);if(v)fd.append(k,v);});}catch{}
   t.rs.forEach(r=>photos.get(r.id).forEach((p,i)=>fd.append('photos[]',p.blob,`${r.name.replace(/[^a-z0-9]+/gi,'-').toLowerCase()||'room'}-${i+1}.jpg`)));
   form.dataset.sending='1';setStatus(totalPhotos()?'Uploading photos…':'Sending…','');
   push('lead_form_submit',{service:'LVP Installed',form_name:'photo-estimator'});

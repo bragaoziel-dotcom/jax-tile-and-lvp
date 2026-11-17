@@ -13,12 +13,12 @@ function line(string $value): string { return str_replace(["\r", "\n"], ' ', tri
 if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') respond(['ok' => false, 'message' => 'Method not allowed'], 405);
 
 // 1) Honeypot: bots fill the hidden "website" field. Pretend success, never count a conversion.
-if (!empty($_POST['website'] ?? '')) respond(['ok' => true, 'trackConversion' => false]);
+if (!empty($_POST['website'] ?? '')) { logFilteredLead('honeypot'); respond(['ok' => true, 'trackConversion' => false]); }
 
 // 2) Time trap: real people take more than ~2.5 s to fill the form (set by /assets/site.js).
 $elapsedRaw = clean('elapsed_ms', 12);
 $elapsed = ctype_digit($elapsedRaw) ? (int)$elapsedRaw : null;
-if ($elapsed !== null && $elapsed < 2500) respond(['ok' => true, 'trackConversion' => false]);
+if ($elapsed !== null && $elapsed < 2500) { logFilteredLead('time trap (' . $elapsed . ' ms)'); respond(['ok' => true, 'trackConversion' => false]); }
 
 $name = line(clean('name', 100));
 $email = line(clean('email', 150));
@@ -62,7 +62,7 @@ if ($zip === '') respond(['ok' => false, 'field' => 'zip', 'message' => 'Please 
 if (!in_array($service, $allowedServices, true) || ($email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL))) respond(['ok' => false, 'message' => 'Please check the form and try again.'], 422);
 
 // 5) Obvious spam content: links in the name, or many links in the details. Drop quietly.
-if (preg_match('~https?://|www\.|@~i', $name) || preg_match_all('~https?://~i', $details) > 1) respond(['ok' => true, 'trackConversion' => false]);
+if (preg_match('~https?://|www\.|@~i', $name) || preg_match_all('~https?://~i', $details) > 1) { logFilteredLead('link in name/details'); respond(['ok' => true, 'trackConversion' => false]); }
 
 // 6) Duplicate suppression (10 minutes).
 $fingerprint = hash('sha256', strtolower($phoneDigits . '|' . $zip . '|' . $sqft . '|' . $details . '|' . $estSummary));
@@ -71,6 +71,8 @@ if (is_file($cache) && time() - filemtime($cache) < 600) respond(['ok' => true, 
 
 $tracking = [];
 foreach (['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'gclid', 'gbraid', 'wbraid', 'fbclid'] as $key) { $value = clean($key, 180); if ($value !== '') $tracking[] = $key . ': ' . $value; }
+foreach (['landing_page', 'first_referrer', 'first_seen'] as $key) { $value = line(clean($key, 300)); if ($value !== '') $tracking[] = $key . ': ' . $value; }
+$leadSource = classifyLeadSource();
 
 $phonePretty = sprintf('(%s) %s-%s', substr($phoneDigits, 0, 3), substr($phoneDigits, 3, 3), substr($phoneDigits, 6));
 $flags = [];
@@ -86,7 +88,7 @@ $subject = ($inArea ? '' : '[CHECK AREA] ') . ($isTile ? 'New tile installation 
 $estimate = $isTile
     ? 'Tile installation: custom quote after free measure (no published package price)'
     : ($smallJob ? 'UNDER 1,000 SQ FT: package price does not apply; no price was shown to the customer (custom quote)' : ($sqft > 0 ? '$' . number_format($sqft * 3.99, 0) . ' base at $3.99/sq ft (package, 1,000+ sq ft), before add-ons' : 'n/a'));
-$body = "Name: $name\nPhone: $phonePretty\nEmail: $email\nZIP: $zip\nApprox. sq ft: $sizeTxt\nCurrent floor: " . ($floor ?: 'not given') . "\nBase estimate: $estimate\nService: $service\nPage: $page"
+$body = "Lead source: $leadSource\nName: $name\nPhone: $phonePretty\nEmail: $email\nZIP: $zip\nApprox. sq ft: $sizeTxt\nCurrent floor: " . ($floor ?: 'not given') . "\nBase estimate: $estimate\nService: $service\nPage: $page"
   . ($color !== '' ? "\nLVP color: $color" : '')
   . ($quote !== '' ? "\n$quote" : '')
   . ($estSummary !== '' ? "\n\n$estSummary" : '')
@@ -159,7 +161,7 @@ sendToZoho([
     'page' => $page,
     'quote' => trim($quote . ($color !== '' ? ' | Color: ' . $color : '') . ($estSummary !== '' ? "\n" . $estSummary : '')),
     'estimate' => $estimate,
-    'tracking' => $tracking,
+    'tracking' => array_merge(['lead_source: ' . $leadSource], $tracking),
     'flags' => $flags,
     'lead_id' => $leadId,
     'qualified' => $qualified,
@@ -168,6 +170,74 @@ sendToZoho([
 // Only real, in-area leads with JS timing count as a Google Ads / GA4 / Meta conversion.
 $countable = $inArea && $elapsed !== null;
 respond(['ok' => true, 'trackConversion' => $countable, 'qualified' => $countable && $qualified, 'leadId' => $leadId]);
+
+/**
+ * Human-readable acquisition channel from the first-touch attribution that
+ * /assets/site.js stores and posts as hidden fields.
+ */
+function classifyLeadSource(): string
+{
+    $src = strtolower(clean('utm_source', 180));
+    $med = strtolower(clean('utm_medium', 180));
+    $camp = strtolower(clean('utm_campaign', 180));
+    if (clean('gclid', 180) !== '' || clean('gbraid', 180) !== '' || clean('wbraid', 180) !== '') return 'Google Ads';
+    if ($src !== '') {
+        if ((strpos($src, 'google') !== false) && ((strpos($camp, 'gbp') !== false) || (strpos($src, 'gbp') !== false) || $med === 'gbp')) return 'Google Business Profile';
+        if ((strpos($src, 'google') !== false) && preg_match('/^(cpc|ppc|paid|paidsearch|paid_search|ads)$/', $med)) return 'Google Ads';
+        if ((strpos($src, 'google') !== false) && ($med === 'lsa' || (strpos($camp, 'lsa') !== false))) return 'Google Local Services';
+        if ((strpos($src, 'google') !== false)) return 'Google (' . ($med !== '' ? $med : 'utm') . ')';
+        if (preg_match('/facebook|^fb$|instagram|^ig$|meta/', $src)) return 'Facebook/Instagram' . ($med !== '' ? " ($med)" : '');
+        if ((strpos($src, 'nextdoor') !== false)) return 'Nextdoor';
+        return 'Campaign: ' . $src . ($med !== '' ? " / $med" : '');
+    }
+    if (clean('fbclid', 180) !== '') return 'Facebook/Instagram';
+    $ref = clean('first_referrer', 300);
+    if ($ref === '') return 'Direct / unknown';
+    $host = strtolower((string)parse_url($ref, PHP_URL_HOST));
+    $path = strtolower((string)parse_url($ref, PHP_URL_PATH));
+    $host = preg_replace('/^www\./', '', $host) ?? $host;
+    if ($host === '') return 'Other referrer';
+    if (preg_match('/(^|\.)google\.[a-z.]+$/', $host)) return ((strpos($host, 'maps.') === 0) || (strpos($path, '/maps') === 0)) ? 'Google Maps' : 'Google Organic';
+    if ((substr($host, -strlen('googleadservices.com')) === 'googleadservices.com') || (substr($host, -strlen('doubleclick.net')) === 'doubleclick.net')) return 'Google Ads';
+    if (preg_match('/(^|\.)(facebook|fb|instagram)\.com$/', $host)) return 'Facebook/Instagram';
+    if ((substr($host, -strlen('bing.com')) === 'bing.com')) return 'Bing';
+    if ((substr($host, -strlen('chatgpt.com')) === 'chatgpt.com') || (substr($host, -strlen('openai.com')) === 'openai.com')) return 'ChatGPT';
+    if ((substr($host, -strlen('perplexity.ai')) === 'perplexity.ai')) return 'Perplexity';
+    if ((substr($host, -strlen('nextdoor.com')) === 'nextdoor.com')) return 'Nextdoor';
+    if ((substr($host, -strlen('bragaremodeling.com')) === 'bragaremodeling.com')) return 'bragaremodeling.com';
+    return "Other referrer ($host)";
+}
+
+/**
+ * Private append-only log of submissions the anti-spam checks drop silently
+ * (honeypot, time trap, links). Stored OUTSIDE the web root so a wrongly
+ * blocked customer can still be found. Never blocks the response.
+ */
+function logFilteredLead(string $reason): void
+{
+    try {
+        $docRoot = realpath(__DIR__ . '/..');
+        if ($docRoot === false) return;
+        $dir = dirname($docRoot) . '/.jax-lead-log';
+        if (!is_dir($dir)) @mkdir($dir, 0700, true);
+        $entry = [
+            'at' => gmdate('c'),
+            'reason' => $reason,
+            'name' => clean('name', 100),
+            'phone' => clean('phone', 30),
+            'email' => clean('email', 150),
+            'zip' => clean('zip', 10),
+            'service' => clean('service', 80),
+            'page' => clean('page', 180),
+            'details' => clean('details', 600),
+            'lead_source' => classifyLeadSource(),
+            'ip' => (string)($_SERVER['REMOTE_ADDR'] ?? ''),
+        ];
+        @file_put_contents($dir . '/filtered-leads.jsonl', json_encode($entry, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . "\n", FILE_APPEND | LOCK_EX);
+    } catch (\Throwable $e) {
+        error_log('[jax-lead] filter log failed: ' . $e->getMessage());
+    }
+}
 
 /**
  * Server config file shared by the Zoho CRM and ZeptoMail transports.
