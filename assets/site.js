@@ -35,13 +35,14 @@ const attribution=(()=>{
   const cut=(v,n)=>String(v||'').trim().slice(0,n);
   let ref=cut(document.referrer,300),internal=false;
   try{if(ref&&new URL(ref).hostname.replace(/^www\./,'')===location.hostname.replace(/^www\./,''))internal=true}catch{}
-  let stored=null;try{stored=JSON.parse(localStorage.getItem(KEY)||'null');if(stored&&Date.now()-Date.parse(stored.first_seen||0)>MAX_AGE)stored=null}catch{stored=null}
+  const readKey=st=>{try{const r=JSON.parse(st.getItem(KEY)||'null');return r&&Date.now()-Date.parse(r.first_seen||0)<=MAX_AGE?r:null}catch{return null}};
+  let stored=readKey(window.localStorage)||readKey(window.sessionStorage);
   const current={};ATTR_KEYS.forEach(k=>{const v=cut(params.get(k),180);if(v)current[k]=v});
   const hasCampaign=Object.keys(current).length>0;
   let record=stored;
   if(hasCampaign||(!stored&&!internal)){
     record=Object.assign(current,{landing_page:cut(location.pathname+location.search,300),first_referrer:internal?'':ref,first_seen:new Date().toISOString()});
-    try{localStorage.setItem(KEY,JSON.stringify(record))}catch{}
+    try{localStorage.setItem(KEY,JSON.stringify(record))}catch{}try{sessionStorage.setItem(KEY,JSON.stringify(record))}catch{}
   }
   const out={};if(record)Object.keys(record).forEach(k=>{if(record[k])out[k]=String(record[k])});
   try{ATTR_KEYS.forEach(k=>{if(out[k])sessionStorage.setItem('jax_'+k,out[k])})}catch{}
