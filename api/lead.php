@@ -42,11 +42,14 @@ $zipRaw = clean('zip', 10);
 $zip = preg_match('/^(\d{5})(-\d{4})?$/', $zipRaw, $zm) ? $zm[1] : '';
 $inArea = $zip !== '' && (bool)preg_match('/^32[02]\d{2}$/', $zip);
 
-// Qualified-lead rule (online signal for Google Ads, 2026-10-17): LVP lead, in the
-// service area, 1,000+ sq ft (the $3.99 package minimum). ZIPs the campaign excludes
-// (Callahan, Hilliard, Middleburg) never count. Leads without sq ft are NOT counted
-// online; they can still be imported later as offline "qualified" conversions.
-const QUALIFIED_MIN_SQFT = 1000;
+// Qualified-lead rule (online signal for Google Ads): LVP lead, in the
+// service area, with sq ft given. The published package is $4.99/sq ft
+// material + labor, any size (owner rule 2026-11-16; the previous 3.99
+// / 1,000+ sq ft minimum is retired). ZIPs the campaign excludes
+// (Callahan, Hilliard, Middleburg) never count. Leads without sq ft are
+// NOT counted as qualified online; they can still be imported later as
+// offline conversions.
+const QUALIFIED_MIN_SQFT = 1; // any size; sq ft must be provided
 const QUALIFIED_EXCLUDED_ZIPS = ['32011', '32046', '32068'];
 
 $sqftRaw = preg_replace('/[^\d]/', '', clean('sqft', 8));
@@ -79,15 +82,13 @@ $flags = [];
 if (!$inArea) $flags[] = 'OUTSIDE SERVICE AREA (ZIP not 320xx/322xx)';
 if ($elapsed === null) $flags[] = 'no JS timing (possible bot)';
 $sizeTxt = $sqft > 0 ? $sqft . ' sq ft' : 'sq ft not given';
-$smallJob = $sqft > 0 && $sqft < 1000;
-// The $3.99 package is for 1,000 sq ft and up; smaller areas are not advertised (custom quote, Oziel decides).
 $isTile = $service === 'Tile Installation';
 $qualified = $inArea && !$isTile && $sqft >= QUALIFIED_MIN_SQFT && !in_array($zip, QUALIFIED_EXCLUDED_ZIPS, true);
 $leadId = 'JTL-' . date('Ymd') . '-' . substr($fingerprint, 0, 8);
-$subject = ($inArea ? '' : '[CHECK AREA] ') . ($isTile ? 'New tile installation lead: ' : ($smallJob ? '[UNDER 1,000 SQ FT] New LVP lead: ' : 'New LVP $3.99 lead: ')) . $zip . ' · ' . $sizeTxt;
+$subject = ($inArea ? '' : '[CHECK AREA] ') . ($isTile ? 'New tile installation lead: ' : 'New LVP $4.99 lead: ') . $zip . ' · ' . $sizeTxt;
 $estimate = $isTile
     ? 'Tile installation: custom quote after free measure (no published package price)'
-    : ($smallJob ? 'UNDER 1,000 SQ FT: package price does not apply; no price was shown to the customer (custom quote)' : ($sqft > 0 ? '$' . number_format($sqft * 3.99, 0) . ' base at $3.99/sq ft (package, 1,000+ sq ft), before add-ons' : 'n/a'));
+    : ($sqft > 0 ? '$' . number_format($sqft * 4.99, 0) . ' base at $4.99/sq ft (material + labor, any size), before add-ons' : 'n/a — $4.99/sq ft material + labor, any size');
 $body = "Lead source: $leadSource\nName: $name\nPhone: $phonePretty\nEmail: $email\nZIP: $zip\nApprox. sq ft: $sizeTxt\nCurrent floor: " . ($floor ?: 'not given') . "\nBase estimate: $estimate\nService: $service\nPage: $page"
   . ($color !== '' ? "\nLVP color: $color" : '')
   . ($quote !== '' ? "\n$quote" : '')
@@ -95,7 +96,7 @@ $body = "Lead source: $leadSource\nName: $name\nPhone: $phonePretty\nEmail: $ema
   . ($details !== '' ? "\nDetails: $details" : '')
   . "\nSource: jaxtileandlvp.com"
   . "\nLead ID: $leadId"
-  . "\nPre-qualified (online rule: 1,000+ sq ft, in area, not tile): " . ($qualified ? 'YES' : 'NO')
+  . "\nPre-qualified (online rule: LVP in area, sq ft given, any size at \$4.99/sq ft, not tile): " . ($qualified ? 'YES' : 'NO')
   . "\nMaterial+install confirmed: PENDING (confirm with client)"
   . ($flags ? "\n\nFlags: " . implode('; ', $flags) : '')
   . ($tracking ? "\n\nAttribution:\n" . implode("\n", $tracking) : '');
@@ -648,7 +649,7 @@ function sendToZoho(array $lead): void
         'Lead Source: jaxtileandlvp.com',
         !empty($lead['tracking']) ? 'Attribution: ' . implode('; ', $lead['tracking']) : null,
         !empty($lead['flags']) ? 'Flags: ' . implode('; ', $lead['flags']) : null,
-        !empty($lead['lead_id']) ? 'Lead ID: ' . $lead['lead_id'] . ' | Pre-qualified (online rule: 1,000+ sq ft, in area, not tile): ' . (!empty($lead['qualified']) ? 'YES' : 'NO') . ' | Material+install confirmed: PENDING (confirm with client)' : null,
+        !empty($lead['lead_id']) ? 'Lead ID: ' . $lead['lead_id'] . ' | Pre-qualified (online rule: LVP in area, sq ft given, any size at $4.99/sq ft, not tile): ' . (!empty($lead['qualified']) ? 'YES' : 'NO') . ' | Material+install confirmed: PENDING (confirm with client)' : null,
         'Captured at: ' . gmdate('c'),
     ]));
 

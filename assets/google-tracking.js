@@ -84,8 +84,10 @@
   window.jaxTrackLeadConversion = function () {
     window.gtag("event", "conversion", { send_to: LEAD_CONVERSION, value: 1.0, currency: "USD" });
   };
-  // Second, separate conversion: "JTL - Pre-qualified lead (1,000+ sq ft, in area)".
-  // Decided server-side by /api/lead.php (in area, not tile, 1,000+ sq ft). Fires at most
+  // Second, separate conversion: "JTL - Pre-qualified lead" (same Ads label;
+  // rename in the Google Ads UI from the old "1,000+ sq ft" name when convenient).
+  // Decided server-side by /api/lead.php: in area, not tile, sq ft given
+  // (package is $4.99/sq ft material + labor, any size). Fires at most
   // once per Lead ID (transaction_id = Lead ID; also de-duplicated in the page).
   var QUALIFIED_LEAD_CONVERSION = "AW-18023260184/0V9jCPvRg6AdEJjAlJJD";
   var qualifiedSent = {};

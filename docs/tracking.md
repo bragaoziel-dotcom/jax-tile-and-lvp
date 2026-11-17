@@ -1,6 +1,6 @@
 # Jax Tile & LVP — Tracking Reference
 
-Last updated: 2026-10-02.
+Last updated: 2026-11-16.
 
 ## Shared Braga measurement infrastructure
 
@@ -71,8 +71,8 @@ These must not be installed in Jax runtime code:
 
 The historical `GTM-MF6BLDTV` container was documented in the Braga Remodeling repository as contaminated/cross-business and is not the Braga production container.
 
-## Qualified lead conversion ("JTL - Pre-qualified lead (1,000+ sq ft, in area)")
-- `/api/lead.php` decides server-side: `qualified = in service area (320xx/322xx, minus 32011/32046/32068) AND not tile AND sq ft >= 1000`.
+## Qualified lead conversion ("JTL - Pre-qualified lead")
+- `/api/lead.php` decides server-side: `qualified = in service area (320xx/322xx, minus 32011/32046/32068) AND not tile AND sq ft given` (any size; published package is $4.99/sq ft material + labor). The previous 1,000+ sq ft / 3.99 minimum is retired.
 - The response is `{ok, trackConversion, qualified, leadId}`. "Form submitted" (sry7…) still fires exactly as before. When `qualified` is true, `window.jaxTrackQualifiedLead(leadId)` also fires a second Google Ads conversion (with `transaction_id = leadId`) and the dataLayer event `qualified_lead`.
-- Label: `QUALIFIED_LEAD_CONVERSION = AW-18023260184/0V9jCPvRg6AdEJjAlJJD`; fires at most once per Lead ID.
-- The lead ID and "Pre-qualified (online rule: 1,000+ sq ft, in area, not tile): YES/NO" and "Material+install confirmed: PENDING" go into the e-mail and Zoho, for offline import.
+- Label: `QUALIFIED_LEAD_CONVERSION = AW-18023260184/0V9jCPvRg6AdEJjAlJJD` (same conversion action; rename in the Google Ads UI from the old "1,000+ sq ft" name when convenient); fires at most once per Lead ID.
+- The lead ID and "Pre-qualified (online rule: LVP in area, sq ft given, any size at $4.99/sq ft, not tile): YES/NO" and "Material+install confirmed: PENDING" go into the e-mail and Zoho, for offline import.
